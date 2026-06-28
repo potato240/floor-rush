@@ -240,8 +240,7 @@ HATS.forEach(h => {
 // ─── Renderer ─────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = false;
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 100);
 resize();
@@ -359,7 +358,7 @@ function buildMap() {
         const floor = new THREE.Mesh(fGeo, floorMat);
         floor.rotation.x = -Math.PI/2;
         floor.position.set(wx, 0, wz);
-        floor.receiveShadow = true;
+        floor.receiveShadow = false;
         scene.add(floor);
 
         const ceil = new THREE.Mesh(cGeo, ceilMat);
@@ -369,8 +368,8 @@ function buildMap() {
       } else {
         const wall = new THREE.Mesh(wGeo, wallMat);
         wall.position.set(wx, WALL_H/2, wz);
-        wall.castShadow = true;
-        wall.receiveShadow = true;
+        wall.castShadow = false;
+        wall.receiveShadow = false;
         scene.add(wall);
         walls.push({ minX: wx-TILE/2, maxX: wx+TILE/2, minZ: wz-TILE/2, maxZ: wz+TILE/2 });
       }
@@ -384,7 +383,7 @@ function buildMap() {
         const wx = col*TILE+TILE/2, wz = r*TILE+TILE/2;
         const pl = new THREE.PointLight(c.light, 1.4, 14);
         pl.position.set(wx, WALL_H-0.1, wz);
-        pl.castShadow = true;
+        pl.castShadow = false;
         scene.add(pl);
         const fix = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.07,0.5),
           new THREE.MeshBasicMaterial({ color: c.light }));
@@ -534,7 +533,7 @@ function makeCrewmate(color, hatId) {
     g.add(hat);
   }
 
-  g.traverse(m => { if (m.isMesh && m !== visor) m.castShadow = true; });
+  g.traverse(m => { if (m.isMesh && m !== visor) m.castShadow = false; });
   return g;
 }
 
