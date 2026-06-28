@@ -721,8 +721,10 @@ function spawnNPCs() {
       mesh, color: col,
       targetPanel: null,
       activateTimer: 0,
+      path: [], pathStep: 0,
       wanderTarget: new THREE.Vector3(bx,0,bz),
-      wanderTimer: Math.random()*2,
+      wanderTimer: 1 + Math.random()*2,
+      elevatorTarget: false,
     });
   }
 }
@@ -811,9 +813,11 @@ function aStar(grid, sr, sc, gr, gc) {
   const sk = K(sr,sc);
   open.set(sk, h(sr,sc)); g.set(sk,0);
   const DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
-  while (open.size > 0) {
+  let iters = 0;
+  while (open.size > 0 && ++iters < 100000) {
     let bestK=null, bestF=Infinity;
     for (const [k,f] of open) { if (f<bestF){bestF=f;bestK=k;} }
+    if (bestK === null) break;
     const r=Math.floor(bestK/1000), c=bestK%1000;
     if (r===gr && c===gc) {
       const path=[]; let cur=bestK;
@@ -1092,14 +1096,18 @@ function togglePOV() {
 // ─── Loop ─────────────────────────────────────────────────────────────────────
 function loop() {
   raf = requestAnimationFrame(loop);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  if (locked) {
-    updatePlayer(dt);
-    checkLookTarget();
+  try {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    if (locked) {
+      updatePlayer(dt);
+      checkLookTarget();
+    }
+    updateNPCs(dt);
+    checkElevatorFill();
+    renderer.render(scene, camera);
+  } catch(e) {
+    console.error('Loop error:', e);
   }
-  updateNPCs(dt);
-  checkElevatorFill();
-  renderer.render(scene, camera);
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
