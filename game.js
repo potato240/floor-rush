@@ -6,10 +6,9 @@ const WALL_H         = 5;
 const PLAYER_SPEED   = 6;
 const NPC_SPEED      = 2.8;
 const NPC_COUNT      = 5;
-const CAM_DIST       = 5.5;
-const CAM_HEIGHT     = 4;
-const CAM_MIN_PITCH  = 0.15;
-const CAM_MAX_PITCH  = 0.75;
+const CAM_DIST       = 4.5;
+const CAM_MIN_PITCH  = 0.05;
+const CAM_MAX_PITCH  = 0.65;
 const INTERACT_DIST  = 2.8;
 const PANEL_ACTIVATE_TIME = 1.8;
 
@@ -256,8 +255,9 @@ function resize() {
 // ─── State ────────────────────────────────────────────────────────────────────
 let scene, mapDef, floorNum = 1;
 let player = { pos: new THREE.Vector3(), angle: 0, mesh: null, speed: 0 };
-let camYaw = Math.PI, camPitch = 0.55;
+let camYaw = Math.PI, camPitch = 0.18;
 let firstPerson = false;
+let fpPitch = 0;
 let walls = [];
 let panels = [], panelsActivated = 0;
 let elevatorDoor = null, elevatorOpen = false;
@@ -279,10 +279,11 @@ document.addEventListener('keyup', e => keys[e.code] = false);
 document.addEventListener('mousemove', e => {
   if (!locked) return;
   camYaw += e.movementX * 0.0025;
-  camPitch -= e.movementY * 0.0025;
   if (firstPerson) {
-    camPitch = Math.max(-1.1, Math.min(1.1, camPitch));
+    fpPitch -= e.movementY * 0.0025;
+    fpPitch = Math.max(-1.1, Math.min(1.1, fpPitch));
   } else {
+    camPitch -= e.movementY * 0.0025;
     camPitch = Math.max(CAM_MIN_PITCH, Math.min(CAM_MAX_PITCH, camPitch));
   }
 });
@@ -698,9 +699,8 @@ function updatePlayer(dt) {
     if (player.mesh) player.mesh.visible = false;
     camera.position.set(player.pos.x, player.pos.y + 1.55, player.pos.z);
     camera.rotation.order = 'YXZ';
-    // camYaw=PI → looking down -Z (same as Three default), so rotation.y = PI - camYaw
     camera.rotation.y = Math.PI - camYaw;
-    camera.rotation.x = camPitch - 0.55; // 0.55 is the rest pitch, centres at horizontal
+    camera.rotation.x = fpPitch;
     camera.rotation.z = 0;
   } else {
     if (player.mesh) player.mesh.visible = true;
@@ -913,7 +913,8 @@ function doFlash(color, strength) {
 // ─── POV toggle ───────────────────────────────────────────────────────────────
 function togglePOV() {
   firstPerson = !firstPerson;
-  if (!firstPerson && player.mesh) player.mesh.visible = true;
+  if (firstPerson) fpPitch = 0;
+  else if (player.mesh) player.mesh.visible = true;
   showMessage(firstPerson ? 'FIRST PERSON' : 'THIRD PERSON', 900);
 }
 
