@@ -278,9 +278,13 @@ document.addEventListener('keyup', e => keys[e.code] = false);
 
 document.addEventListener('mousemove', e => {
   if (!locked) return;
-  camYaw   += e.movementX * 0.0025;
+  camYaw += e.movementX * 0.0025;
   camPitch -= e.movementY * 0.0025;
-  camPitch  = Math.max(CAM_MIN_PITCH, Math.min(CAM_MAX_PITCH, camPitch));
+  if (firstPerson) {
+    camPitch = Math.max(-1.1, Math.min(1.1, camPitch));
+  } else {
+    camPitch = Math.max(CAM_MIN_PITCH, Math.min(CAM_MAX_PITCH, camPitch));
+  }
 });
 
 document.addEventListener('pointerlockchange', () => {
@@ -336,7 +340,7 @@ function buildMap() {
   const rows = g.length, cols = g[0].length;
   const c    = mapDef.colors;
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
   const floorMat = new THREE.MeshLambertMaterial({ color: c.floor });
   const ceilMat  = new THREE.MeshLambertMaterial({ color: c.ceiling });
@@ -689,18 +693,28 @@ function updatePlayer(dt) {
     player.mesh.position.y = Math.abs(Math.sin(clock.elapsedTime * 7)) * 0.06;
   }
 
-  // Third-person camera
+  // Camera
   if (firstPerson) {
+    if (player.mesh) player.mesh.visible = false;
     camera.position.set(player.pos.x, player.pos.y + 1.55, player.pos.z);
     camera.rotation.order = 'YXZ';
-    camera.rotation.y = camYaw + Math.PI;
-    camera.rotation.x = -camPitch * 0.6;
-    if (player.mesh) player.mesh.visible = false;
+    // camYaw=PI → looking down -Z (same as Three default), so rotation.y = PI - camYaw
+    camera.rotation.y = Math.PI - camYaw;
+    camera.rotation.x = camPitch - 0.55; // 0.55 is the rest pitch, centres at horizontal
+    camera.rotation.z = 0;
   } else {
     if (player.mesh) player.mesh.visible = true;
-    const camX = player.pos.x - Math.sin(camYaw) * CAM_DIST * Math.cos(camPitch);
-    const camZ = player.pos.z - Math.cos(camYaw) * CAM_DIST * Math.cos(camPitch);
-    const camY = Math.min(player.pos.y + 0.9 + Math.sin(camPitch) * CAM_DIST, WALL_H - 0.4);
+    // Walk camera back from player, collide with walls
+    let safeDist = 0.5;
+    for (let d = 0.5; d <= CAM_DIST; d += 0.25) {
+      const tx = player.pos.x - Math.sin(camYaw) * d * Math.cos(camPitch);
+      const tz = player.pos.z - Math.cos(camYaw) * d * Math.cos(camPitch);
+      if (blocked(tx, tz, 0.15)) break;
+      safeDist = d;
+    }
+    const camX = player.pos.x - Math.sin(camYaw) * safeDist * Math.cos(camPitch);
+    const camZ = player.pos.z - Math.cos(camYaw) * safeDist * Math.cos(camPitch);
+    const camY = Math.min(player.pos.y + 0.9 + Math.sin(camPitch) * safeDist, WALL_H - 0.4);
     camera.position.set(camX, camY, camZ);
     camera.rotation.order = 'XYZ';
     camera.lookAt(player.pos.x, player.pos.y + 0.9, player.pos.z);
