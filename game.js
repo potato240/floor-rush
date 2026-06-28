@@ -2,14 +2,14 @@ import * as THREE from 'three';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const TILE           = 4;
-const WALL_H         = 3.2;
+const WALL_H         = 5;
 const PLAYER_SPEED   = 6;
 const NPC_SPEED      = 2.8;
 const NPC_COUNT      = 5;
-const CAM_DIST       = 6;
+const CAM_DIST       = 5.5;
 const CAM_HEIGHT     = 4;
-const CAM_MIN_PITCH  = 0.2;
-const CAM_MAX_PITCH  = 1.1;
+const CAM_MIN_PITCH  = 0.15;
+const CAM_MAX_PITCH  = 0.75;
 const INTERACT_DIST  = 2.8;
 const PANEL_ACTIVATE_TIME = 1.8;
 
@@ -276,7 +276,7 @@ document.addEventListener('keyup', e => keys[e.code] = false);
 
 document.addEventListener('mousemove', e => {
   if (!locked) return;
-  camYaw   -= e.movementX * 0.0025;
+  camYaw   += e.movementX * 0.0025;
   camPitch -= e.movementY * 0.0025;
   camPitch  = Math.max(CAM_MIN_PITCH, Math.min(CAM_MAX_PITCH, camPitch));
 });
@@ -658,8 +658,8 @@ function blocked(x, z, r) {
 
 // ─── Player update ────────────────────────────────────────────────────────────
 function updatePlayer(dt) {
-  const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
-  const rgt = new THREE.Vector3( Math.cos(camYaw), 0, -Math.sin(camYaw));
+  const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
+  const rgt = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));
   const move = new THREE.Vector3();
 
   if (keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
@@ -690,7 +690,7 @@ function updatePlayer(dt) {
   // Third-person camera
   const camX = player.pos.x - Math.sin(camYaw) * CAM_DIST * Math.cos(camPitch);
   const camZ = player.pos.z - Math.cos(camYaw) * CAM_DIST * Math.cos(camPitch);
-  const camY = player.pos.y + 0.9 + Math.sin(camPitch) * CAM_DIST;
+  const camY = Math.min(player.pos.y + 0.9 + Math.sin(camPitch) * CAM_DIST, WALL_H - 0.4);
   camera.position.set(camX, camY, camZ);
   camera.lookAt(player.pos.x, player.pos.y + 0.9, player.pos.z);
 }
