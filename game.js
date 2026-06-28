@@ -257,6 +257,7 @@ function resize() {
 let scene, mapDef, floorNum = 1;
 let player = { pos: new THREE.Vector3(), angle: 0, mesh: null, speed: 0 };
 let camYaw = Math.PI, camPitch = 0.55;
+let firstPerson = false;
 let walls = [];
 let panels = [], panelsActivated = 0;
 let elevatorDoor = null, elevatorOpen = false;
@@ -271,6 +272,7 @@ let _openCells = null;
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyE') interact();
+  if (e.code === 'KeyV') togglePOV();
 });
 document.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -315,7 +317,7 @@ function loadMap(mapKey) {
 
   const c = mapDef.colors;
   scene.background = new THREE.Color(c.ceiling).multiplyScalar(0.15);
-  scene.fog = new THREE.Fog(scene.background, 10, 45);
+  scene.fog = new THREE.Fog(scene.background, 18, 55);
 
   buildMap();
   spawnPlayer();
@@ -688,11 +690,21 @@ function updatePlayer(dt) {
   }
 
   // Third-person camera
-  const camX = player.pos.x - Math.sin(camYaw) * CAM_DIST * Math.cos(camPitch);
-  const camZ = player.pos.z - Math.cos(camYaw) * CAM_DIST * Math.cos(camPitch);
-  const camY = Math.min(player.pos.y + 0.9 + Math.sin(camPitch) * CAM_DIST, WALL_H - 0.4);
-  camera.position.set(camX, camY, camZ);
-  camera.lookAt(player.pos.x, player.pos.y + 0.9, player.pos.z);
+  if (firstPerson) {
+    camera.position.set(player.pos.x, player.pos.y + 1.55, player.pos.z);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = camYaw + Math.PI;
+    camera.rotation.x = -camPitch * 0.6;
+    if (player.mesh) player.mesh.visible = false;
+  } else {
+    if (player.mesh) player.mesh.visible = true;
+    const camX = player.pos.x - Math.sin(camYaw) * CAM_DIST * Math.cos(camPitch);
+    const camZ = player.pos.z - Math.cos(camYaw) * CAM_DIST * Math.cos(camPitch);
+    const camY = Math.min(player.pos.y + 0.9 + Math.sin(camPitch) * CAM_DIST, WALL_H - 0.4);
+    camera.position.set(camX, camY, camZ);
+    camera.rotation.order = 'XYZ';
+    camera.lookAt(player.pos.x, player.pos.y + 0.9, player.pos.z);
+  }
 }
 
 // ─── NPC update ───────────────────────────────────────────────────────────────
@@ -777,16 +789,18 @@ function checkLookTarget() {
   ray.setFromCamera(centre, camera);
   const panelObjs = panels.flatMap(p => p.children.filter(c=>c.isMesh));
   const hit = ray.intersectObjects(panelObjs);
-  if (hit.length && hit[0].distance < INTERACT_DIST) {
+  if (hit.length) {
     const p = panels.find(p => p.children.includes(hit[0].object));
     if (p && !p.userData.activated) {
-      lookTarget = { type:'panel', obj:p };
-      interactHint.textContent = '[E] Activate Panel';
-      interactHint.style.display = 'block';
-      return;
+      const playerDist = player.pos.distanceTo(p.userData.worldPos);
+      if (playerDist < INTERACT_DIST) {
+        lookTarget = { type:'panel', obj:p };
+        interactHint.textContent = '[E] Activate Panel';
+        interactHint.style.display = 'block';
+        return;
+      }
     }
   }
-  // Check elevator
   if (elevatorOpen) {
     const d = player.pos.distanceTo(elevatorPos);
     if (d < INTERACT_DIST) {
@@ -880,6 +894,13 @@ function doFlash(color, strength) {
   flashEl.style.background = '#' + color.toString(16).padStart(6,'0');
   flashEl.style.opacity = strength;
   setTimeout(() => flashEl.style.opacity = 0, 350);
+}
+
+// ─── POV toggle ───────────────────────────────────────────────────────────────
+function togglePOV() {
+  firstPerson = !firstPerson;
+  if (!firstPerson && player.mesh) player.mesh.visible = true;
+  showMessage(firstPerson ? 'FIRST PERSON' : 'THIRD PERSON', 900);
 }
 
 // ─── Loop ─────────────────────────────────────────────────────────────────────
