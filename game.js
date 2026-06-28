@@ -277,7 +277,7 @@ document.addEventListener('keyup', e => keys[e.code] = false);
 
 document.addEventListener('mousemove', e => {
   if (!locked) return;
-  camYaw += e.movementX * 0.0025;
+  camYaw -= e.movementX * 0.0015;
   if (firstPerson) {
     fpPitch -= e.movementY * 0.0025;
     fpPitch = Math.max(-1.1, Math.min(1.1, fpPitch));
