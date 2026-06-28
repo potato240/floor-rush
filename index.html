@@ -5,135 +5,186 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Floor Rush</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-    #canvas { display: block; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#000; overflow:hidden; font-family:'Segoe UI',sans-serif; color:#fff; }
+    #canvas { display:block; }
+
+    /* ── Overlay ── */
+    #overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.92);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      z-index:100; gap:18px;
+    }
+    #overlay h1 { font-size:52px; color:#00ffcc; letter-spacing:4px; text-shadow:0 0 30px #00ffcc; }
+    #overlay .subtitle { color:#888; font-size:15px; }
+
+    .creator-row {
+      display:flex; gap:30px; align-items:flex-start;
+    }
+
+    .creator-section { display:flex; flex-direction:column; align-items:center; gap:10px; }
+    .creator-section h3 { font-size:13px; letter-spacing:2px; color:#00ffcc; text-transform:uppercase; }
+
+    /* Colour grid */
+    #color-grid { display:grid; grid-template-columns:repeat(6,34px); gap:6px; }
+    .color-swatch {
+      width:34px; height:34px; border-radius:50%; cursor:pointer;
+      border:3px solid transparent; transition:transform .1s, border-color .1s;
+    }
+    .color-swatch:hover  { transform:scale(1.15); }
+    .color-swatch.active { border-color:#fff; transform:scale(1.15); }
+
+    /* Hat grid */
+    #hat-grid { display:grid; grid-template-columns:repeat(4,70px); gap:8px; }
+    .hat-btn {
+      width:70px; height:50px; background:#1a1a1a; border:2px solid #333;
+      border-radius:8px; cursor:pointer; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; font-size:11px; color:#aaa;
+      gap:4px; transition:border-color .1s, color .1s;
+    }
+    .hat-btn .hat-icon { font-size:20px; }
+    .hat-btn:hover  { border-color:#00ffcc; color:#fff; }
+    .hat-btn.active { border-color:#00ffcc; color:#00ffcc; background:#0a2020; }
+
+    /* Map select */
+    #map-select select {
+      background:#111; color:#fff; border:2px solid #00ffcc;
+      padding:8px 16px; font-size:15px; border-radius:8px; cursor:pointer;
+      width:200px;
+    }
+
+    #play-btn {
+      background:#00ffcc; color:#000; border:none;
+      padding:14px 60px; font-size:20px; font-weight:bold;
+      border-radius:30px; cursor:pointer;
+      transition:transform .1s, box-shadow .1s;
+      margin-top:6px;
+    }
+    #play-btn:hover { transform:scale(1.05); box-shadow:0 0 30px #00ffcc; }
+
+    /* ── HUD ── */
     #ui {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; color: #fff;
+      position:fixed; inset:0; pointer-events:none; color:#fff;
     }
     #crosshair {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 20px; height: 20px;
+      position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      width:16px; height:16px;
     }
-    #crosshair::before, #crosshair::after {
-      content: ''; position: absolute; background: rgba(255,255,255,0.8);
+    #crosshair::before,#crosshair::after {
+      content:''; position:absolute; background:rgba(255,255,255,0.7);
     }
-    #crosshair::before { width: 2px; height: 100%; left: 50%; top: 0; transform: translateX(-50%); }
-    #crosshair::after  { width: 100%; height: 2px; top: 50%; left: 0; transform: translateY(-50%); }
-    #hud {
-      position: absolute; bottom: 30px; left: 50%;
-      transform: translateX(-50%);
-      text-align: center;
+    #crosshair::before { width:2px; height:100%; left:50%; top:0; transform:translateX(-50%); }
+    #crosshair::after  { width:100%; height:2px; top:50%; left:0; transform:translateY(-50%); }
+
+    #floor-label {
+      position:absolute; top:18px; left:50%; transform:translateX(-50%);
+      font-size:17px; font-weight:bold; letter-spacing:2px;
+      background:rgba(0,0,0,0.55); padding:5px 20px; border-radius:20px;
     }
-    #panel-status {
-      font-size: 22px; font-weight: bold;
-      text-shadow: 0 0 10px #00ffcc;
-      margin-bottom: 8px;
+    #panel-bar {
+      position:absolute; bottom:28px; left:50%; transform:translateX(-50%);
+      text-align:center;
     }
+    #panel-label { font-size:20px; font-weight:bold; margin-bottom:6px; text-shadow:0 0 8px #00ffcc; }
+    #panel-track {
+      display:flex; gap:8px; justify-content:center; margin-bottom:8px;
+    }
+    .panel-pip {
+      width:18px; height:18px; border-radius:50%;
+      border:2px solid #00ffcc; background:transparent;
+      transition:background .3s;
+    }
+    .panel-pip.done { background:#00ffcc; }
     #interact-hint {
-      font-size: 14px; opacity: 0.7;
-      background: rgba(0,0,0,0.5);
-      padding: 4px 12px; border-radius: 20px;
-      display: none;
+      font-size:13px; background:rgba(0,0,0,0.5);
+      padding:4px 14px; border-radius:20px; display:none; margin:0 auto;
     }
-    #floor-info {
-      position: absolute; top: 20px; left: 50%;
-      transform: translateX(-50%);
-      font-size: 18px; font-weight: bold;
-      background: rgba(0,0,0,0.6);
-      padding: 6px 20px; border-radius: 20px;
-      letter-spacing: 1px;
+
+    #crew-hud {
+      position:absolute; top:18px; left:18px;
+      display:flex; flex-direction:column; gap:4px;
     }
-    #team-status {
-      position: absolute; top: 20px; right: 20px;
-      font-size: 13px;
-    }
+    #crew-hud-label { font-size:10px; letter-spacing:2px; color:#888; }
+    #crew-dots { display:flex; gap:5px; flex-wrap:wrap; max-width:120px; }
     .crew-dot {
-      display: inline-block; width: 10px; height: 10px;
-      border-radius: 50%; margin: 2px;
+      width:12px; height:12px; border-radius:50%;
     }
-    #overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      pointer-events: all; z-index: 100;
-    }
-    #overlay h1 { font-size: 52px; color: #00ffcc; margin-bottom: 10px; letter-spacing: 3px; }
-    #overlay p  { color: #aaa; margin-bottom: 30px; font-size: 16px; }
-    #overlay button {
-      background: #00ffcc; color: #000; border: none;
-      padding: 14px 40px; font-size: 18px; font-weight: bold;
-      border-radius: 30px; cursor: pointer; pointer-events: all;
-      transition: transform 0.1s, box-shadow 0.1s;
-    }
-    #overlay button:hover { transform: scale(1.05); box-shadow: 0 0 20px #00ffcc; }
-    #map-select { margin-bottom: 20px; }
-    #map-select select {
-      background: #111; color: #fff; border: 1px solid #00ffcc;
-      padding: 8px 16px; font-size: 15px; border-radius: 8px;
-      cursor: pointer;
-    }
-    #elevator-flash {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: #fff; opacity: 0; pointer-events: none;
-      transition: opacity 0.3s;
-      z-index: 90;
-    }
+
     #message {
-      position: absolute; top: 45%; left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 28px; font-weight: bold;
-      color: #00ffcc; text-shadow: 0 0 20px #00ffcc;
-      text-align: center; display: none;
+      position:absolute; top:42%; left:50%; transform:translate(-50%,-50%);
+      font-size:30px; font-weight:bold; color:#00ffcc;
+      text-shadow:0 0 20px #00ffcc; text-align:center;
+      display:none; pointer-events:none;
     }
-    #npc-crew {
-      position: absolute; top: 20px; left: 20px;
+    #flash {
+      position:fixed; inset:0; opacity:0; pointer-events:none;
+      transition:opacity .3s; z-index:90;
     }
-    #npc-crew-label { font-size: 12px; opacity: 0.6; margin-bottom: 4px; }
+
+    #controls-hint {
+      position:absolute; bottom:18px; right:18px;
+      font-size:11px; color:#555; line-height:1.8;
+      text-align:right;
+    }
   </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
+
 <div id="ui">
   <div id="crosshair"></div>
-  <div id="floor-info">FLOOR 1 — OFFICE</div>
-  <div id="npc-crew">
-    <div id="npc-crew-label">CREW</div>
+  <div id="floor-label">FLOOR 1 — OFFICE</div>
+  <div id="crew-hud">
+    <div id="crew-hud-label">CREW</div>
     <div id="crew-dots"></div>
   </div>
-  <div id="team-status"></div>
-  <div id="hud">
-    <div id="panel-status">PANELS: 0 / 3</div>
+  <div id="panel-bar">
+    <div id="panel-label">PANELS: 0 / 5</div>
+    <div id="panel-track"></div>
     <div id="interact-hint">[E] Activate Panel</div>
   </div>
   <div id="message"></div>
+  <div id="controls-hint">WASD — Move<br>Mouse — Look<br>E — Interact<br>Click — Lock cursor</div>
 </div>
-<div id="elevator-flash"></div>
+<div id="flash"></div>
 
 <div id="overlay">
   <h1>FLOOR RUSH</h1>
-  <p>Find and activate all panels to open the elevator</p>
-  <div id="map-select">
-    <select id="map-picker">
-      <option value="office">Office</option>
-      <option value="polus">Polus</option>
-      <option value="caverns">Caverns</option>
-      <option value="lab">Lab</option>
-      <option value="ikea">IKEA</option>
-      <option value="carpark">Car Park</option>
-    </select>
+  <p class="subtitle">Find and activate all panels — then take the elevator</p>
+
+  <div class="creator-row">
+    <div class="creator-section">
+      <h3>Colour</h3>
+      <div id="color-grid"></div>
+    </div>
+    <div class="creator-section">
+      <h3>Hat</h3>
+      <div id="hat-grid"></div>
+    </div>
+    <div class="creator-section">
+      <h3>Map</h3>
+      <div id="map-select">
+        <select id="map-picker">
+          <option value="office">Office</option>
+          <option value="polus">Polus</option>
+          <option value="caverns">Caverns</option>
+          <option value="lab">Lab</option>
+          <option value="ikea">IKEA</option>
+          <option value="carpark">Car Park</option>
+        </select>
+      </div>
+    </div>
   </div>
-  <button id="start-btn">PLAY</button>
+
+  <button id="play-btn">PLAY</button>
 </div>
 
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
   }
 }
 </script>

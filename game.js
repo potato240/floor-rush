@@ -1,791 +1,904 @@
 import * as THREE from 'three';
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-const PLAYER_HEIGHT = 1.7;
-const PLAYER_SPEED  = 5;
-const GRAVITY       = 20;
-const TILE          = 4;       // world units per grid cell
-const NPC_COUNT     = 5;
-const NPC_SPEED     = 2.2;
-const PANEL_INTERACT_DIST = 2.5;
-const ELEVATOR_INTERACT_DIST = 2.5;
+// ─── Config ───────────────────────────────────────────────────────────────────
+const TILE           = 4;
+const WALL_H         = 3.2;
+const PLAYER_SPEED   = 6;
+const NPC_SPEED      = 2.8;
+const NPC_COUNT      = 5;
+const CAM_DIST       = 6;
+const CAM_HEIGHT     = 4;
+const CAM_MIN_PITCH  = 0.2;
+const CAM_MAX_PITCH  = 1.1;
+const INTERACT_DIST  = 2.8;
+const PANEL_ACTIVATE_TIME = 1.8;
 
-// ─── Crew colours ─────────────────────────────────────────────────────────────
-const CREW_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6,
-                     0x1abc9c, 0xe67e22, 0xec407a, 0x00bcd4];
+// ─── Among Us colours ─────────────────────────────────────────────────────────
+const AU_COLORS = [
+  { name:'Red',     hex:0xc51111 },
+  { name:'Blue',    hex:0x132ed2 },
+  { name:'Green',   hex:0x117f2d },
+  { name:'Purple',  hex:0x6b2fbb },
+  { name:'Yellow',  hex:0xc9d42b },
+  { name:'Orange',  hex:0xf07d0c },
+  { name:'Pink',    hex:0xec54bb },
+  { name:'Brown',   hex:0x71491e },
+  { name:'Cyan',    hex:0x38fedc },
+  { name:'Lime',    hex:0x50ef39 },
+  { name:'Maroon',  hex:0x6b2737 },
+  { name:'Coral',   hex:0xff8d6b },
+  { name:'Black',   hex:0x3f474e },
+  { name:'White',   hex:0xd6e0f0 },
+  { name:'Teal',    hex:0x00827f },
+  { name:'Rose',    hex:0xff63d4 },
+  { name:'Banana',  hex:0xffff7a },
+  { name:'Olive',   hex:0x847a37 },
+];
 
-// ─── Map definitions ──────────────────────────────────────────────────────────
-// Each map: { name, theme, grid, panelCount, spawn, elevatorCell }
-// Grid: 2D array, 0=floor, 1=wall, 2=window wall (still solid), S=spawn area
+// ─── Hat definitions ──────────────────────────────────────────────────────────
+const HATS = [
+  { id:'none',     label:'None',      icon:'🚫' },
+  { id:'cap',      label:'Cap',       icon:'🧢' },
+  { id:'tophat',   label:'Top Hat',   icon:'🎩' },
+  { id:'party',    label:'Party Hat', icon:'🎉' },
+  { id:'crown',    label:'Crown',     icon:'👑' },
+  { id:'beanie',   label:'Beanie',    icon:'🪖' },
+  { id:'hardhat',  label:'Hard Hat',  icon:'⛑️'  },
+  { id:'flower',   label:'Flower',    icon:'🌸' },
+];
 
+// ─── Maps ─────────────────────────────────────────────────────────────────────
+// 0=floor, 1=wall
 const MAPS = {
   office: {
-    name: 'OFFICE',
-    floor: 0x607d8b, ceiling: 0xeceff1, wall: 0xb0bec5,
-    accent: 0x1565c0, light: 0xfff9c4,
-    panelCount: 3,
-    grid: [
-      [1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,1,1,0,0,1,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,1,1,0,0,1,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1],
-    ],
-    spawn: { x: 2, z: 2 },
-    elevator: { x: 9, z: 8 },
-  },
-  polus: {
-    name: 'POLUS',
-    floor: 0x455a64, ceiling: 0x1a237e, wall: 0x37474f,
-    accent: 0x80cbc4, light: 0xa5d6a7,
-    panelCount: 4,
-    grid: [
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,1,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,1,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,1,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,1,0,0,0,0,0,1],
-      [1,1,0,1,1,1,0,1,0,1,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,1,0,0,0,0,0,1,0,0,1],
-      [1,0,0,0,1,0,0,0,0,0,1,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    ],
-    spawn: { x: 2, z: 2 },
-    elevator: { x: 11, z: 9 },
-  },
-  caverns: {
-    name: 'CAVERNS',
-    floor: 0x3e2723, ceiling: 0x1a1a1a, wall: 0x4e342e,
-    accent: 0xff7043, light: 0xff6f00,
-    panelCount: 4,
-    grid: [
-      [1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,1,0,0,0,1,0,0,0,1],
-      [1,0,0,0,0,1,0,0,0,1,0,1],
-      [1,1,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,1,1,0,0,1,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,1,0,1],
-      [1,0,1,0,0,1,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,1,0,0,0,1],
-      [1,0,0,1,0,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1],
-    ],
-    spawn: { x: 1, z: 1 },
-    elevator: { x: 10, z: 8 },
-  },
-  lab: {
-    name: 'LAB',
-    floor: 0xe0f2f1, ceiling: 0xffffff, wall: 0xb2dfdb,
-    accent: 0x00e5ff, light: 0xe0f7fa,
-    panelCount: 5,
-    grid: [
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,1,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,1,0,0,0,0,0,0,1],
-      [1,0,0,1,1,0,0,0,0,1,1,0,0,1],
-      [1,0,0,1,1,0,0,0,0,1,1,0,0,1],
-      [1,0,0,0,0,0,1,1,0,0,0,0,0,1],
-      [1,0,0,0,0,0,1,1,0,0,0,0,0,1],
-      [1,0,0,1,1,0,0,0,0,1,1,0,0,1],
-      [1,0,0,1,1,0,0,0,0,1,1,0,0,1],
-      [1,0,0,0,0,0,1,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,1,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    ],
-    spawn: { x: 1, z: 1 },
-    elevator: { x: 12, z: 10 },
-  },
-  ikea: {
-    name: 'IKEA',
-    floor: 0xfff8e1, ceiling: 0xffeb3b, wall: 0x0d47a1,
-    accent: 0xfdd835, light: 0xfffde7,
-    panelCount: 4,
-    grid: [
+    name:'OFFICE', panelCount:6,
+    colors:{ floor:0x607d8b, ceiling:0xeceff1, wall:0xb0bec5, trim:0x1565c0, light:0xfff9e7 },
+    // 16×12 open-plan office with cubicle bays, a boardroom and corridors
+    grid:[
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1],
       [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1],
-      [1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
-      [1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1],
-      [1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1],
-      [1,0,1,0,1,0,1,1,1,1,0,1,0,1,0,1],
-      [1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1],
-      [1,0,1,0,1,0,0,0,0,1,0,1,0,1,0,1],
-      [1,0,0,0,1,1,1,0,1,1,0,0,0,0,0,1],
-      [1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,1],
-      [1,0,1,1,1,1,0,0,0,1,1,1,0,1,0,1],
+      [1,0,0,1,1,0,1,0,0,1,1,0,1,0,0,1],
+      [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1],
+      [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1],
+      [1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,1,0,0,0,0,0,0,1,1,0,0,1],
+      [1,0,0,1,1,0,0,0,0,0,0,1,1,0,0,1],
       [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     ],
-    spawn: { x: 1, z: 1 },
-    elevator: { x: 14, z: 12 },
+    spawn:{ x:2, z:2 },
+    elevator:{ x:13, z:10 },
   },
-  carpark: {
-    name: 'CAR PARK',
-    floor: 0x546e7a, ceiling: 0x37474f, wall: 0x607d8b,
-    accent: 0xffee58, light: 0xfff59d,
-    panelCount: 3,
-    grid: [
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,1,1,1,0,0,1,1,1,0,0,0,1],
-      [1,0,1,0,0,0,0,0,0,1,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,1,0,1],
-      [1,0,1,0,0,0,0,0,0,1,0,1,0,1],
-      [1,0,1,1,1,0,0,1,1,1,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,1,1,1,0,0,1,1,1,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+
+  // Polus — modelled on the Among Us Polus map layout
+  polus:{
+    name:'POLUS', panelCount:8,
+    colors:{ floor:0x2d4a5c, ceiling:0x0d1f2d, wall:0x1e3a4a, trim:0x80cbc4, light:0x7ec8e3 },
+    grid:[
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1],
+      [1,0,0,1,1,0,0,0,0,0,1,1,0,1,1,0,0,0,0,0,1,1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,0,1,1,1,1,0,1,1,0,1,1,0,1,1,1,0,1,1,1,1,0,1,1,1],
+      [1,1,1,1,0,1,1,1,1,0,0,0,0,0,0,0,1,1,1,0,1,1,1,1,0,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,1,1,0,0,1,1,1,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1],
+      [1,0,0,1,1,1,0,0,1,1,1,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     ],
-    spawn: { x: 1, z: 1 },
-    elevator: { x: 12, z: 9 },
+    spawn:{ x:2, z:2 },
+    elevator:{ x:25, z:15 },
+  },
+
+  caverns:{
+    name:'CAVERNS', panelCount:7,
+    colors:{ floor:0x2e1503, ceiling:0x0a0a0a, wall:0x3e2003, trim:0xff6f00, light:0xff4500 },
+    grid:[
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1],
+      [1,0,1,0,0,0,0,1,0,0,1,0,0,0,0,1,0,1],
+      [1,0,1,0,1,1,0,0,0,0,0,0,1,1,0,1,0,1],
+      [1,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,1],
+      [1,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,1,1],
+      [1,0,0,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1],
+      [1,0,1,0,0,1,1,0,0,0,0,1,1,0,0,1,0,1],
+      [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+      [1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    spawn:{ x:1, z:1 },
+    elevator:{ x:16, z:12 },
+  },
+
+  lab:{
+    name:'LAB', panelCount:8,
+    colors:{ floor:0xe8f5e9, ceiling:0xffffff, wall:0xb2dfdb, trim:0x00e5ff, light:0xe0f7fa },
+    grid:[
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,0,1,0,1,1,1,1,0,1,0,1,0,0,1],
+      [1,0,0,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1],
+      [1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1],
+      [1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1,1],
+      [1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,1,1],
+      [1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1],
+      [1,0,0,1,0,1,0,1,1,1,1,0,1,0,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    spawn:{ x:1, z:1 },
+    elevator:{ x:16, z:12 },
+  },
+
+  ikea:{
+    name:'IKEA', panelCount:7,
+    colors:{ floor:0xfff9e5, ceiling:0xffeb3b, wall:0x0d47a1, trim:0xfdd835, light:0xfffde7 },
+    grid:[
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,0,1],
+      [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,1],
+      [1,0,1,0,1,1,0,0,0,0,0,1,0,0,0,1,0,1,0,1],
+      [1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,0,1,0,0,0,0,1,1,1,1,0,0,0,0,0,0,1,0,1],
+      [1,0,1,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,1],
+      [1,0,1,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,1],
+      [1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,0,1,0,1,1,0,0,0,0,0,1,0,0,0,1,0,1,0,1],
+      [1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,1],
+      [1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    spawn:{ x:1, z:1 },
+    elevator:{ x:18, z:13 },
+  },
+
+  carpark:{
+    name:'CAR PARK', panelCount:6,
+    colors:{ floor:0x4a5568, ceiling:0x2d3748, wall:0x5a6a7a, trim:0xffee58, light:0xfff59d },
+    grid:[
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1,0,1],
+      [1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,1],
+      [1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1,0,1],
+      [1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    spawn:{ x:1, z:1 },
+    elevator:{ x:16, z:12 },
   },
 };
-
-// ─── State ────────────────────────────────────────────────────────────────────
-let scene, renderer, camera;
-let mapDef, floorNum = 1;
-let panels = [], panelsActivated = 0;
-let elevatorOpen = false, elevatorDoor = null;
-let npcs = [];
-let walls = [];            // AABB collision boxes {minX,maxX,minZ,maxZ}
-let keys = {};
-let velocity = new THREE.Vector3();
-let yaw = 0, pitch = 0;
-let locked = false;
-let lookTarget = null;     // panel/elevator being looked at
-let frameId;
-let clock = new THREE.Clock();
-let ambientLight, pointLights = [];
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 const canvas        = document.getElementById('canvas');
 const overlay       = document.getElementById('overlay');
-const startBtn      = document.getElementById('start-btn');
+const playBtn       = document.getElementById('play-btn');
 const mapPicker     = document.getElementById('map-picker');
-const panelStatus   = document.getElementById('panel-status');
+const colorGrid     = document.getElementById('color-grid');
+const hatGrid       = document.getElementById('hat-grid');
+const floorLabel    = document.getElementById('floor-label');
+const panelLabel    = document.getElementById('panel-label');
+const panelTrack    = document.getElementById('panel-track');
 const interactHint  = document.getElementById('interact-hint');
-const floorInfo     = document.getElementById('floor-info');
-const elevatorFlash = document.getElementById('elevator-flash');
-const messageEl     = document.getElementById('message');
 const crewDotsEl    = document.getElementById('crew-dots');
+const messageEl     = document.getElementById('message');
+const flashEl       = document.getElementById('flash');
 
-// ─── Init renderer ────────────────────────────────────────────────────────────
-renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// ─── Player choices ───────────────────────────────────────────────────────────
+let chosenColor = AU_COLORS[0].hex;
+let chosenHat   = 'none';
+
+// ─── Build character creator UI ───────────────────────────────────────────────
+AU_COLORS.forEach(c => {
+  const sw = document.createElement('div');
+  sw.className = 'color-swatch' + (c.hex === chosenColor ? ' active' : '');
+  sw.style.background = '#' + c.hex.toString(16).padStart(6,'0');
+  sw.title = c.name;
+  sw.addEventListener('click', () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    chosenColor = c.hex;
+  });
+  colorGrid.appendChild(sw);
+});
+
+HATS.forEach(h => {
+  const btn = document.createElement('div');
+  btn.className = 'hat-btn' + (h.id === chosenHat ? ' active' : '');
+  btn.innerHTML = `<span class="hat-icon">${h.icon}</span><span>${h.label}</span>`;
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.hat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    chosenHat = h.id;
+  });
+  hatGrid.appendChild(btn);
+});
+
+// ─── Renderer ─────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-resize();
 
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 100);
+resize();
 window.addEventListener('resize', resize);
 function resize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  if (camera) {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  }
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-startBtn.addEventListener('click', () => {
-  overlay.style.display = 'none';
-  loadMap(mapPicker.value);
-  canvas.requestPointerLock();
+// ─── State ────────────────────────────────────────────────────────────────────
+let scene, mapDef, floorNum = 1;
+let player = { pos: new THREE.Vector3(), angle: 0, mesh: null, speed: 0 };
+let camYaw = Math.PI, camPitch = 0.55;
+let walls = [];
+let panels = [], panelsActivated = 0;
+let elevatorDoor = null, elevatorOpen = false;
+let elevatorPos = new THREE.Vector3();
+let npcs = [];
+let keys = {}, locked = false;
+let lookTarget = null;
+let raf, clock = new THREE.Clock();
+let _openCells = null;
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyE') interact();
+});
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+document.addEventListener('mousemove', e => {
+  if (!locked) return;
+  camYaw   -= e.movementX * 0.0025;
+  camPitch -= e.movementY * 0.0025;
+  camPitch  = Math.max(CAM_MIN_PITCH, Math.min(CAM_MAX_PITCH, camPitch));
 });
 
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
 });
+canvas.addEventListener('click', () => { if (!locked) canvas.requestPointerLock(); });
 
-document.addEventListener('mousemove', e => {
-  if (!locked) return;
-  yaw   -= e.movementX * 0.002;
-  pitch -= e.movementY * 0.002;
-  pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
+// ─── Start ────────────────────────────────────────────────────────────────────
+playBtn.addEventListener('click', () => {
+  overlay.style.display = 'none';
+  startGame(mapPicker.value);
+  canvas.requestPointerLock();
 });
 
-document.addEventListener('keydown', e => { keys[e.code] = true; });
-document.addEventListener('keyup',   e => { keys[e.code] = false; });
+function startGame(mapKey) {
+  if (raf) cancelAnimationFrame(raf);
+  floorNum = 1;
+  loadMap(mapKey);
+}
 
-document.addEventListener('keydown', e => {
-  if (e.code === 'KeyE') interact();
-});
-
-canvas.addEventListener('click', () => {
-  if (!locked) canvas.requestPointerLock();
-});
-
-// ─── Load map ─────────────────────────────────────────────────────────────────
 function loadMap(mapKey) {
-  if (scene) { renderer.renderLists.dispose(); scene.clear(); }
-  cancelAnimationFrame(frameId);
+  if (scene) scene.clear();
+  scene = new THREE.Scene();
 
   mapDef = MAPS[mapKey];
+  _openCells = null;
+  panels = [];
   panelsActivated = 0;
   elevatorOpen = false;
   elevatorDoor = null;
-  panels = [];
-  npcs = [];
   walls = [];
-  pointLights = [];
+  npcs = [];
   lookTarget = null;
 
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x111111);
-  scene.fog = new THREE.Fog(0x111111, 8, 30);
+  const c = mapDef.colors;
+  scene.background = new THREE.Color(c.ceiling).multiplyScalar(0.15);
+  scene.fog = new THREE.Fog(scene.background, 10, 45);
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 60);
-
-  buildSceneFromGrid();
-  buildNPCs();
+  buildMap();
+  spawnPlayer();
+  spawnNPCs();
   updateHUD();
   updateCrewDots();
-
-  floorInfo.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
+  floorLabel.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
 
   clock.start();
   loop();
 }
 
-// ─── Build scene from grid ────────────────────────────────────────────────────
-function buildSceneFromGrid() {
-  const grid = mapDef.grid;
-  const rows = grid.length;
-  const cols = grid[0].length;
+// ─── Map builder ──────────────────────────────────────────────────────────────
+function buildMap() {
+  const g    = mapDef.grid;
+  const rows = g.length, cols = g[0].length;
+  const c    = mapDef.colors;
 
-  // Ambient
-  ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-  scene.add(ambientLight);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
-  const floorMat   = new THREE.MeshLambertMaterial({ color: mapDef.floor });
-  const ceilMat    = new THREE.MeshLambertMaterial({ color: mapDef.ceiling });
-  const wallMat    = new THREE.MeshLambertMaterial({ color: mapDef.wall });
+  const floorMat = new THREE.MeshLambertMaterial({ color: c.floor });
+  const ceilMat  = new THREE.MeshLambertMaterial({ color: c.ceiling });
+  const wallMat  = new THREE.MeshLambertMaterial({ color: c.wall });
+  const trimMat  = new THREE.MeshLambertMaterial({ color: c.trim, emissive: c.trim, emissiveIntensity: 0.25 });
 
-  const floorGeo  = new THREE.PlaneGeometry(TILE, TILE);
-  const ceilGeo   = new THREE.PlaneGeometry(TILE, TILE);
-
-  // Collect open floor cells for panel placement
-  const openCells = [];
+  const fGeo = new THREE.PlaneGeometry(TILE, TILE);
+  const wGeo = new THREE.BoxGeometry(TILE, WALL_H, TILE);
+  const cGeo = new THREE.PlaneGeometry(TILE, TILE);
 
   for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const wx = c * TILE + TILE / 2;
-      const wz = r * TILE + TILE / 2;
-
-      if (grid[r][c] === 0) {
-        // Floor tile
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
+    for (let col = 0; col < cols; col++) {
+      const wx = col * TILE + TILE/2, wz = r * TILE + TILE/2;
+      if (g[r][col] === 0) {
+        const floor = new THREE.Mesh(fGeo, floorMat);
+        floor.rotation.x = -Math.PI/2;
         floor.position.set(wx, 0, wz);
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // Ceiling tile
-        const ceil = new THREE.Mesh(ceilGeo, ceilMat);
-        ceil.rotation.x = Math.PI / 2;
-        ceil.position.set(wx, 3, wz);
+        const ceil = new THREE.Mesh(cGeo, ceilMat);
+        ceil.rotation.x = Math.PI/2;
+        ceil.position.set(wx, WALL_H, wz);
         scene.add(ceil);
-
-        openCells.push({ r, c, wx, wz });
       } else {
-        // Wall block
-        const wallGeo = new THREE.BoxGeometry(TILE, 3, TILE);
-        const wall = new THREE.Mesh(wallGeo, wallMat);
-        wall.position.set(wx, 1.5, wz);
+        const wall = new THREE.Mesh(wGeo, wallMat);
+        wall.position.set(wx, WALL_H/2, wz);
         wall.castShadow = true;
         wall.receiveShadow = true;
         scene.add(wall);
-
-        walls.push({
-          minX: wx - TILE / 2, maxX: wx + TILE / 2,
-          minZ: wz - TILE / 2, maxZ: wz + TILE / 2,
-        });
+        walls.push({ minX: wx-TILE/2, maxX: wx+TILE/2, minZ: wz-TILE/2, maxZ: wz+TILE/2 });
       }
     }
   }
 
-  // Ceiling lights every few cells
-  for (let r = 1; r < rows - 1; r += 3) {
-    for (let c = 1; c < cols - 1; c += 3) {
-      if (grid[r][c] === 0) {
-        const wx = c * TILE + TILE / 2;
-        const wz = r * TILE + TILE / 2;
-        const pl = new THREE.PointLight(mapDef.light, 1.2, 12);
-        pl.position.set(wx, 2.8, wz);
+  // Ceiling lights
+  for (let r = 1; r < rows-1; r += 3) {
+    for (let col = 1; col < cols-1; col += 3) {
+      if (g[r][col] === 0) {
+        const wx = col*TILE+TILE/2, wz = r*TILE+TILE/2;
+        const pl = new THREE.PointLight(c.light, 1.4, 14);
+        pl.position.set(wx, WALL_H-0.1, wz);
         pl.castShadow = true;
         scene.add(pl);
-        pointLights.push(pl);
-
-        // Light fixture mesh
-        const fixtureGeo = new THREE.BoxGeometry(0.6, 0.08, 0.6);
-        const fixtureMat = new THREE.MeshBasicMaterial({ color: mapDef.light });
-        const fixture = new THREE.Mesh(fixtureGeo, fixtureMat);
-        fixture.position.set(wx, 2.96, wz);
-        scene.add(fixture);
+        const fix = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.07,0.5),
+          new THREE.MeshBasicMaterial({ color: c.light }));
+        fix.position.set(wx, WALL_H-0.04, wz);
+        scene.add(fix);
       }
     }
   }
 
-  // ── Elevator ──────────────────────────────────────────────────────────────
-  const ec = mapDef.elevator;
-  const ex = (ec.x) * TILE + TILE / 2;
-  const ez = (ec.z) * TILE + TILE / 2;
+  // ── Elevator ────────────────────────────────────────────────────────────────
+  const ev = mapDef.elevator;
+  const ex = ev.x*TILE+TILE/2, ez = ev.z*TILE+TILE/2;
+  elevatorPos.set(ex, 0, ez);
 
-  // Elevator shaft (glowing surround)
-  const shaftGeo = new THREE.BoxGeometry(TILE - 0.1, 3, TILE - 0.1);
-  const shaftMat = new THREE.MeshLambertMaterial({ color: mapDef.accent, emissive: mapDef.accent, emissiveIntensity: 0.1 });
-  const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-  shaft.position.set(ex, 1.5, ez);
+  const shaftMat = new THREE.MeshLambertMaterial({
+    color: c.trim, emissive: c.trim, emissiveIntensity: 0.15
+  });
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(TILE-0.1, WALL_H, TILE-0.1), shaftMat);
+  shaft.position.set(ex, WALL_H/2, ez);
   scene.add(shaft);
+  walls = walls.filter(w => !(w.minX<ex && w.maxX>ex && w.minZ<ez && w.maxZ>ez));
 
-  // Elevator door (slides up when open)
-  const doorGeo = new THREE.BoxGeometry(TILE * 0.7, 2.8, 0.15);
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0x888888, emissive: 0x444444, emissiveIntensity: 0.3 });
-  elevatorDoor = new THREE.Mesh(doorGeo, doorMat);
-  // Place door on the side facing player spawn
-  const spawnWx = mapDef.spawn.x * TILE + TILE / 2;
-  const spawnWz = mapDef.spawn.z * TILE + TILE / 2;
-  const dx = ex - spawnWx, dz = ez - spawnWz;
-  let doorX = ex, doorZ = ez;
-  if (Math.abs(dx) > Math.abs(dz)) {
-    doorX = ex - Math.sign(dx) * (TILE / 2 - 0.08);
-  } else {
-    doorZ = ez - Math.sign(dz) * (TILE / 2 - 0.08);
-  }
-  elevatorDoor.position.set(doorX, 1.4, doorZ);
-  elevatorDoor.userData.closedY = 1.4;
-  elevatorDoor.userData.openY   = 4.5;
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x777777, emissive:0x333333, emissiveIntensity:0.3 });
+  elevatorDoor = new THREE.Mesh(new THREE.BoxGeometry(TILE*0.72, WALL_H-0.1, 0.18), doorMat);
+  elevatorDoor.position.set(ex, WALL_H/2, ez - TILE/2 + 0.1);
+  elevatorDoor.userData.openY  = WALL_H * 1.5;
+  elevatorDoor.userData.closedY= WALL_H/2;
   scene.add(elevatorDoor);
 
-  // "UP" arrow above elevator
-  addElevatorSign(ex, ez);
+  // Sign above elevator
+  const signGeo = new THREE.BoxGeometry(0.9, 0.35, 0.06);
+  const signMat = new THREE.MeshBasicMaterial({ color: 0x00ff44 });
+  const sign = new THREE.Mesh(signGeo, signMat);
+  sign.position.set(ex, WALL_H-0.3, ez - TILE/2 + 0.06);
+  scene.add(sign);
 
-  // Remove elevator cell from walls (it's open space)
-  walls = walls.filter(w => !(w.minX < ex && w.maxX > ex && w.minZ < ez && w.maxZ > ez));
-
-  // ── Panels ────────────────────────────────────────────────────────────────
-  // Find wall-adjacent open cells for panel placement on walls
-  const wallSides = findWallSides(grid, rows, cols);
-  shuffle(wallSides);
-  const chosen = wallSides.slice(0, mapDef.panelCount);
-
-  chosen.forEach((ws, i) => {
-    addPanel(ws, mapDef.accent);
-  });
-
-  // ── Player spawn ──────────────────────────────────────────────────────────
-  camera.position.set(spawnWx, PLAYER_HEIGHT, spawnWz);
-  yaw = 0; pitch = 0;
+  // ── Panels ──────────────────────────────────────────────────────────────────
+  const sides = findWallSides(g, rows, cols);
+  shuffle(sides);
+  sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
 }
 
-function findWallSides(grid, rows, cols) {
-  const sides = [];
+function findWallSides(g, rows, cols) {
   const dirs = [
-    { dr: -1, dc: 0, nx: 0, nz: -1 },
-    { dr:  1, dc: 0, nx: 0, nz:  1 },
-    { dr:  0, dc:-1, nx:-1, nz:  0 },
-    { dr:  0, dc: 1, nx:  1, nz:  0 },
+    {dr:-1,dc:0,nx:0,nz:-1},{dr:1,dc:0,nx:0,nz:1},
+    {dr:0,dc:-1,nx:-1,nz:0},{dr:0,dc:1,nx:1,nz:0},
   ];
-  for (let r = 1; r < rows - 1; r++) {
-    for (let c = 1; c < cols - 1; c++) {
-      if (grid[r][c] !== 0) continue;
-      const wx = c * TILE + TILE / 2;
-      const wz = r * TILE + TILE / 2;
+  const out = [];
+  for (let r=1; r<rows-1; r++) {
+    for (let c=1; c<cols-1; c++) {
+      if (g[r][c] !== 0) continue;
       for (const d of dirs) {
-        const nr = r + d.dr, nc = c + d.dc;
-        if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-        if (grid[nr][nc] === 1) {
-          sides.push({ wx, wz, nx: d.nx, nz: d.nz });
+        if (g[r+d.dr]?.[c+d.dc] === 1) {
+          out.push({ wx: c*TILE+TILE/2, wz: r*TILE+TILE/2, nx: d.nx, nz: d.nz });
         }
       }
     }
   }
-  return sides;
+  return out;
 }
 
-function addPanel(ws, color) {
-  const panelGroup = new THREE.Group();
+function addPanel(ws, accentColor) {
+  const grp = new THREE.Group();
 
-  // Panel base
-  const baseGeo = new THREE.BoxGeometry(0.5, 0.7, 0.08);
-  const baseMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  const base = new THREE.Mesh(baseGeo, baseMat);
-  panelGroup.add(base);
-
-  // Screen
-  const screenGeo = new THREE.BoxGeometry(0.38, 0.5, 0.06);
-  const screenMat = new THREE.MeshBasicMaterial({ color: color });
-  const screen = new THREE.Mesh(screenGeo, screenMat);
-  screen.position.z = 0.02;
-  panelGroup.add(screen);
-
-  // Glow light
-  const glow = new THREE.PointLight(color, 0.8, 3);
-  glow.position.z = 0.2;
-  panelGroup.add(glow);
-
-  // Position on wall
-  const offset = 0.06;
-  panelGroup.position.set(
-    ws.wx + ws.nx * (TILE / 2 - offset),
-    1.3,
-    ws.wz + ws.nz * (TILE / 2 - offset)
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(0.55, 0.75, 0.09),
+    new THREE.MeshLambertMaterial({ color: 0x1a1a1a })
   );
-  panelGroup.lookAt(
-    ws.wx + ws.nx * 10,
-    1.3,
-    ws.wz + ws.nz * 10
+  grp.add(base);
+
+  const screenMat = new THREE.MeshBasicMaterial({ color: accentColor });
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.55, 0.07), screenMat);
+  screen.position.z = 0.015;
+  grp.add(screen);
+
+  const glow = new THREE.PointLight(accentColor, 0.9, 3.5);
+  glow.position.z = 0.25;
+  grp.add(glow);
+
+  // Buttons row
+  for (let i = -1; i <= 1; i++) {
+    const btn = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04,0.04,0.03,8),
+      new THREE.MeshBasicMaterial({ color: 0x333333 })
+    );
+    btn.rotation.x = Math.PI/2;
+    btn.position.set(i*0.1, -0.28, 0.06);
+    grp.add(btn);
+  }
+
+  const offset = 0.07;
+  grp.position.set(
+    ws.wx + ws.nx*(TILE/2 - offset),
+    1.35,
+    ws.wz + ws.nz*(TILE/2 - offset)
   );
+  grp.lookAt(ws.wx + ws.nx*100, 1.35, ws.wz + ws.nz*100);
 
-  panelGroup.userData.activated = false;
-  panelGroup.userData.wx = ws.wx;
-  panelGroup.userData.wz = ws.wz;
-  panelGroup.userData.glow = glow;
-  panelGroup.userData.screen = screen;
-  panelGroup.userData.screenMat = screenMat;
+  grp.userData = {
+    activated: false,
+    screenMat, glow,
+    worldPos: new THREE.Vector3(ws.wx, 0, ws.wz),
+  };
 
-  scene.add(panelGroup);
-  panels.push(panelGroup);
+  scene.add(grp);
+  panels.push(grp);
 }
 
-function addElevatorSign(ex, ez) {
-  // Simple glowing box above elevator
-  const signGeo = new THREE.BoxGeometry(0.8, 0.4, 0.1);
-  const signMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-  const sign = new THREE.Mesh(signGeo, signMat);
-  sign.position.set(ex, 2.8, ez);
-  scene.add(sign);
-}
-
-// ─── Among Us NPC ─────────────────────────────────────────────────────────────
-function makeCrewmate(color) {
+// ─── Crewmate mesh ────────────────────────────────────────────────────────────
+function makeCrewmate(color, hatId) {
   const g = new THREE.Group();
+  const mat  = new THREE.MeshLambertMaterial({ color });
+  const dark = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.5) });
 
-  // Body (rounded cylinder approximation)
-  const bodyGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.7, 12);
-  const bodyMat = new THREE.MeshLambertMaterial({ color });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 0.35;
+  // Body
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.28,0.72,14), mat);
+  body.position.y = 0.36;
   g.add(body);
 
-  // Head dome
-  const headGeo = new THREE.SphereGeometry(0.32, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.65);
-  const head = new THREE.Mesh(headGeo, bodyMat);
-  head.position.y = 0.72;
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34,14,10), mat);
+  head.position.y = 0.78;
   g.add(head);
 
   // Visor
-  const visorGeo = new THREE.SphereGeometry(0.22, 12, 8, -0.3, Math.PI * 0.8, 0.3, Math.PI * 0.45);
-  const visorMat = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.85 });
-  const visor = new THREE.Mesh(visorGeo, visorMat);
-  visor.position.y = 0.72;
-  visor.position.z = 0.12;
+  const visorMat = new THREE.MeshBasicMaterial({ color:0x88ccff, transparent:true, opacity:0.85 });
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(0.25,12,8,0.2,2.6,0.4,1.2), visorMat);
+  visor.position.set(0, 0.8, 0.18);
   g.add(visor);
 
   // Backpack
-  const packGeo = new THREE.BoxGeometry(0.2, 0.35, 0.18);
-  const pack = new THREE.Mesh(packGeo, bodyMat);
-  pack.position.set(0, 0.42, -0.28);
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.38,0.2), mat);
+  pack.position.set(0, 0.44, -0.3);
   g.add(pack);
 
-  // Legs (two small cylinders)
-  const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.25, 8);
-  for (const lx of [-0.12, 0.12]) {
-    const leg = new THREE.Mesh(legGeo, bodyMat);
-    leg.position.set(lx, 0.0, 0);
+  // Legs
+  for (const lx of [-0.13, 0.13]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.09,0.28,8), mat);
+    leg.position.set(lx, -0.01, 0);
     g.add(leg);
   }
 
-  g.traverse(m => { if (m.isMesh) { m.castShadow = true; } });
+  // Hat
+  const hat = makeHat(hatId, color);
+  if (hat) {
+    hat.position.set(0, 1.1, 0);
+    g.add(hat);
+  }
+
+  g.traverse(m => { if (m.isMesh && m !== visor) m.castShadow = true; });
   return g;
 }
 
-function buildNPCs() {
-  const spawnWx = mapDef.spawn.x * TILE + TILE / 2;
-  const spawnWz = mapDef.spawn.z * TILE + TILE / 2;
+function makeHat(id, baseColor) {
+  if (id === 'none') return null;
+  const grp = new THREE.Group();
+  const col  = new THREE.Color(baseColor);
+  const dark = col.clone().multiplyScalar(0.5);
+  const mat  = (c) => new THREE.MeshLambertMaterial({ color: c });
 
-  for (let i = 0; i < NPC_COUNT; i++) {
-    const color = CREW_COLORS[i % CREW_COLORS.length];
-    const mesh = makeCrewmate(color);
+  switch (id) {
+    case 'cap': {
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.34,0.05,14), mat(dark));
+      const top  = new THREE.Mesh(new THREE.CylinderGeometry(0.23,0.26,0.2,14), mat(col));
+      top.position.y = 0.12;
+      brim.position.y = 0.02;
+      grp.add(brim,top);
+      break;
+    }
+    case 'tophat': {
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.38,0.38,0.04,14), mat(0x111111));
+      const top  = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.42,14), mat(0x111111));
+      top.position.y = 0.23;
+      grp.add(brim,top);
+      break;
+    }
+    case 'party': {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.22,0.5,14), mat(0xff44aa));
+      cone.position.y = 0.25;
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.22,0.03,8,20), mat(0xffff00));
+      band.position.y = 0.02;
+      grp.add(cone,band);
+      break;
+    }
+    case 'crown': {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.32,0.12,14), mat(0xffd700));
+      base.position.y = 0.06;
+      grp.add(base);
+      for (let i=0; i<5; i++) {
+        const a = (i/5)*Math.PI*2;
+        const pt = new THREE.Mesh(new THREE.ConeGeometry(0.05,0.2,6), mat(0xffd700));
+        pt.position.set(Math.sin(a)*0.22, 0.22, Math.cos(a)*0.22);
+        grp.add(pt);
+      }
+      break;
+    }
+    case 'beanie': {
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.3,14,8,0,Math.PI*2,0,1.1), mat(0xff3333));
+      body.position.y = 0.08;
+      const pom  = new THREE.Mesh(new THREE.SphereGeometry(0.09,8,8), mat(0xffffff));
+      pom.position.y = 0.32;
+      grp.add(body,pom);
+      break;
+    }
+    case 'hardhat': {
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.32,14,8,0,Math.PI*2,0,0.75), mat(0xffcc00));
+      dome.position.y = 0.06;
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.05,14), mat(0xffcc00));
+      brim.position.y = 0.02;
+      grp.add(dome,brim);
+      break;
+    }
+    case 'flower': {
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.25,8), mat(0x228B22));
+      stem.position.y = 0.12;
+      const centre = new THREE.Mesh(new THREE.SphereGeometry(0.1,8,8), mat(0xffff00));
+      centre.position.y = 0.28;
+      grp.add(stem,centre);
+      for (let i=0; i<6; i++) {
+        const a = (i/6)*Math.PI*2;
+        const petal = new THREE.Mesh(new THREE.SphereGeometry(0.08,8,6), mat(0xff69b4));
+        petal.position.set(Math.sin(a)*0.18, 0.28, Math.cos(a)*0.18);
+        grp.add(petal);
+      }
+      break;
+    }
+  }
+  return grp;
+}
 
-    const angle = (i / NPC_COUNT) * Math.PI * 2;
-    const r = 1.5;
-    mesh.position.set(spawnWx + Math.cos(angle) * r, 0, spawnWz + Math.sin(angle) * r);
+// ─── Spawn player ─────────────────────────────────────────────────────────────
+function spawnPlayer() {
+  const sp = mapDef.spawn;
+  const wx = sp.x*TILE+TILE/2, wz = sp.z*TILE+TILE/2;
+  player.pos.set(wx, 0, wz);
+  player.angle = 0;
 
+  if (player.mesh) scene.remove(player.mesh);
+  player.mesh = makeCrewmate(chosenColor, chosenHat);
+  player.mesh.position.copy(player.pos);
+  scene.add(player.mesh);
+}
+
+// ─── Spawn NPCs ───────────────────────────────────────────────────────────────
+const NPC_COLORS_POOL = AU_COLORS.filter(c => c.hex !== chosenColor).map(c=>c.hex);
+const NPC_HATS = ['none','cap','tophat','party','beanie','hardhat','flower'];
+
+function spawnNPCs() {
+  const sp = mapDef.spawn;
+  const bx = sp.x*TILE+TILE/2, bz = sp.z*TILE+TILE/2;
+
+  for (let i=0; i<NPC_COUNT; i++) {
+    const col = NPC_COLORS_POOL[i % NPC_COLORS_POOL.length];
+    const hat = NPC_HATS[i % NPC_HATS.length];
+    const mesh = makeCrewmate(col, hat);
+    const a = (i/NPC_COUNT)*Math.PI*2;
+    mesh.position.set(bx+Math.cos(a)*1.6, 0, bz+Math.sin(a)*1.6);
     scene.add(mesh);
 
     npcs.push({
-      mesh,
-      color,
-      vel: new THREE.Vector3(),
-      target: new THREE.Vector3(spawnWx, 0, spawnWz),
-      idleTimer: Math.random() * 3,
-      state: 'wander',
+      mesh, color: col,
+      targetPanel: null,
+      activateTimer: 0,
+      wanderTarget: new THREE.Vector3(bx,0,bz),
+      wanderTimer: Math.random()*2,
     });
   }
 }
 
-// ─── Interaction ──────────────────────────────────────────────────────────────
-function interact() {
-  if (lookTarget && lookTarget.type === 'panel') {
-    activatePanel(lookTarget.obj);
-  } else if (lookTarget && lookTarget.type === 'elevator' && elevatorOpen) {
-    nextFloor();
+// ─── Collision ────────────────────────────────────────────────────────────────
+const PR = 0.35;
+function blocked(x, z, r) {
+  return walls.some(w =>
+    x+r > w.minX && x-r < w.maxX &&
+    z+r > w.minZ && z-r < w.maxZ
+  );
+}
+
+// ─── Player update ────────────────────────────────────────────────────────────
+function updatePlayer(dt) {
+  const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
+  const rgt = new THREE.Vector3( Math.cos(camYaw), 0, -Math.sin(camYaw));
+  const move = new THREE.Vector3();
+
+  if (keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
+  if (keys['KeyS']||keys['ArrowDown'])  move.sub(fwd);
+  if (keys['KeyA']||keys['ArrowLeft'])  move.sub(rgt);
+  if (keys['KeyD']||keys['ArrowRight']) move.add(rgt);
+
+  if (move.lengthSq() > 0) {
+    move.normalize();
+    player.angle = Math.atan2(move.x, move.z);
+    player.speed = PLAYER_SPEED;
+    const nx = player.pos.x + move.x * PLAYER_SPEED * dt;
+    const nz = player.pos.z + move.z * PLAYER_SPEED * dt;
+    if (!blocked(nx, player.pos.z, PR)) player.pos.x = nx;
+    if (!blocked(player.pos.x, nz, PR)) player.pos.z = nz;
+  } else {
+    player.speed = 0;
   }
+
+  player.mesh.position.copy(player.pos);
+  player.mesh.rotation.y = player.angle;
+
+  // Walk bob
+  if (player.speed > 0) {
+    player.mesh.position.y = Math.abs(Math.sin(clock.elapsedTime * 7)) * 0.06;
+  }
+
+  // Third-person camera
+  const camX = player.pos.x - Math.sin(camYaw) * CAM_DIST * Math.cos(camPitch);
+  const camZ = player.pos.z - Math.cos(camYaw) * CAM_DIST * Math.cos(camPitch);
+  const camY = player.pos.y + 0.9 + Math.sin(camPitch) * CAM_DIST;
+  camera.position.set(camX, camY, camZ);
+  camera.lookAt(player.pos.x, player.pos.y + 0.9, player.pos.z);
+}
+
+// ─── NPC update ───────────────────────────────────────────────────────────────
+function updateNPCs(dt) {
+  const cells = getOpenCells();
+
+  for (const npc of npcs) {
+    // Activating a panel
+    if (npc.activateTimer > 0) {
+      npc.activateTimer -= dt;
+      if (npc.activateTimer <= 0 && npc.targetPanel && !npc.targetPanel.userData.activated) {
+        activatePanel(npc.targetPanel);
+        npc.targetPanel = null;
+      }
+      continue;
+    }
+
+    // Find a panel to seek
+    if (!npc.targetPanel || npc.targetPanel.userData.activated) {
+      npc.targetPanel = findNearestPanel(npc.mesh.position, panels);
+    }
+
+    let dest;
+    if (npc.targetPanel) {
+      dest = npc.targetPanel.userData.worldPos;
+    } else {
+      // No panels left — wander
+      npc.wanderTimer -= dt;
+      if (npc.wanderTimer <= 0 && cells.length > 0) {
+        const c = cells[Math.floor(Math.random()*cells.length)];
+        npc.wanderTarget.set(c.wx, 0, c.wz);
+        npc.wanderTimer = 2 + Math.random()*3;
+      }
+      dest = npc.wanderTarget;
+    }
+
+    const dir = new THREE.Vector3(dest.x - npc.mesh.position.x, 0, dest.z - npc.mesh.position.z);
+    const dist = dir.length();
+
+    if (npc.targetPanel && dist < 1.4) {
+      // Stand in front of panel and activate
+      npc.activateTimer = PANEL_ACTIVATE_TIME;
+      npc.mesh.rotation.y = Math.atan2(-npc.targetPanel.userData.worldPos.x + npc.mesh.position.x,
+                                       -npc.targetPanel.userData.worldPos.z + npc.mesh.position.z);
+    } else if (dist > 0.4) {
+      dir.normalize();
+      const nx = npc.mesh.position.x + dir.x * NPC_SPEED * dt;
+      const nz = npc.mesh.position.z + dir.z * NPC_SPEED * dt;
+      if (!blocked(nx, npc.mesh.position.z, 0.3)) npc.mesh.position.x = nx;
+      if (!blocked(npc.mesh.position.x, nz, 0.3)) npc.mesh.position.z = nz;
+      npc.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+      npc.mesh.position.y = Math.abs(Math.sin(clock.elapsedTime*6 + npcs.indexOf(npc)*1.3))*0.05;
+    }
+  }
+}
+
+function findNearestPanel(pos, allPanels) {
+  let best = null, bestDist = Infinity;
+  for (const p of allPanels) {
+    if (p.userData.activated) continue;
+    const d = pos.distanceTo(p.userData.worldPos);
+    if (d < bestDist) { bestDist = d; best = p; }
+  }
+  return best;
+}
+
+function getOpenCells() {
+  if (_openCells) return _openCells;
+  const g = mapDef.grid, out = [];
+  for (let r=0; r<g.length; r++)
+    for (let c=0; c<g[0].length; c++)
+      if (g[r][c] === 0) out.push({ wx: c*TILE+TILE/2, wz: r*TILE+TILE/2 });
+  _openCells = out;
+  return out;
+}
+
+// ─── Raycasting / look target ─────────────────────────────────────────────────
+const ray = new THREE.Raycaster();
+const centre = new THREE.Vector2(0, 0);
+
+function checkLookTarget() {
+  ray.setFromCamera(centre, camera);
+  const panelObjs = panels.flatMap(p => p.children.filter(c=>c.isMesh));
+  const hit = ray.intersectObjects(panelObjs);
+  if (hit.length && hit[0].distance < INTERACT_DIST) {
+    const p = panels.find(p => p.children.includes(hit[0].object));
+    if (p && !p.userData.activated) {
+      lookTarget = { type:'panel', obj:p };
+      interactHint.textContent = '[E] Activate Panel';
+      interactHint.style.display = 'block';
+      return;
+    }
+  }
+  // Check elevator
+  if (elevatorOpen) {
+    const d = player.pos.distanceTo(elevatorPos);
+    if (d < INTERACT_DIST) {
+      lookTarget = { type:'elevator' };
+      interactHint.textContent = '[E] Enter Elevator';
+      interactHint.style.display = 'block';
+      return;
+    }
+  }
+  lookTarget = null;
+  interactHint.style.display = 'none';
+}
+
+// ─── Interact ─────────────────────────────────────────────────────────────────
+function interact() {
+  if (!lookTarget) return;
+  if (lookTarget.type === 'panel') activatePanel(lookTarget.obj);
+  else if (lookTarget.type === 'elevator') nextFloor();
 }
 
 function activatePanel(panel) {
   if (panel.userData.activated) return;
   panel.userData.activated = true;
   panelsActivated++;
-
-  // Turn screen green
   panel.userData.screenMat.color.setHex(0x00ff66);
   panel.userData.glow.color.setHex(0x00ff66);
-
-  // Flash
-  flash(0x00ff66, 0.3);
-
+  panel.userData.glow.intensity = 1.5;
+  doFlash(0x00ff66, 0.25);
   updateHUD();
-
-  if (panelsActivated >= mapDef.panelCount) {
-    openElevator();
-  }
+  if (panelsActivated >= mapDef.panelCount) openElevator();
 }
 
 function openElevator() {
   elevatorOpen = true;
-  showMessage('ALL PANELS ACTIVATED!\nFIND THE ELEVATOR!', 2500);
-  flash(0x00ffcc, 0.5);
-
-  // Animate door open
+  showMessage('ALL PANELS ACTIVATED!\nHEAD TO THE ELEVATOR!', 2800);
+  doFlash(0x00ffcc, 0.6);
   animateDoor();
 }
 
 function animateDoor() {
   const door = elevatorDoor;
-  const targetY = door.userData.openY;
-  const speed = 2;
+  const target = door.userData.openY;
   function step() {
-    door.position.y += speed * 0.016;
-    if (door.position.y < targetY) requestAnimationFrame(step);
-    else door.position.y = targetY;
+    door.position.y += 0.08;
+    if (door.position.y < target) requestAnimationFrame(step);
+    else door.position.y = target;
   }
   step();
 }
 
 function nextFloor() {
   floorNum++;
-  flash(0xffffff, 0.8);
+  doFlash(0xffffff, 0.9);
+  const keys = Object.keys(MAPS);
+  const next = keys[floorNum % keys.length];
   setTimeout(() => {
-    // Reload same map (or cycle) for next floor
-    const mapKeys = Object.keys(MAPS);
-    const nextKey = mapKeys[floorNum % mapKeys.length];
     showMessage(`FLOOR ${floorNum}`, 1500);
-    setTimeout(() => loadMap(nextKey), 800);
-  }, 400);
-}
-
-// ─── Raycasting for look-target ───────────────────────────────────────────────
-const raycaster = new THREE.Raycaster();
-const center    = new THREE.Vector2(0, 0);
-
-function checkLookTarget() {
-  raycaster.setFromCamera(center, camera);
-
-  // Check panels
-  const panelMeshes = panels.flatMap(p => p.children.filter(c => c.isMesh));
-  const panelHit = raycaster.intersectObjects(panelMeshes, false);
-
-  if (panelHit.length > 0 && panelHit[0].distance < PANEL_INTERACT_DIST) {
-    const hitPanel = panels.find(p => p.children.includes(panelHit[0].object));
-    if (hitPanel && !hitPanel.userData.activated) {
-      lookTarget = { type: 'panel', obj: hitPanel };
-      interactHint.style.display = 'block';
-      interactHint.textContent = '[E] Activate Panel';
-      return;
-    }
-  }
-
-  // Check elevator
-  if (elevatorOpen && elevatorDoor) {
-    const elevHit = raycaster.intersectObject(elevatorDoor);
-    const ex = mapDef.elevator.x * TILE + TILE / 2;
-    const ez = mapDef.elevator.z * TILE + TILE / 2;
-    const dist = camera.position.distanceTo(new THREE.Vector3(ex, PLAYER_HEIGHT, ez));
-    if (dist < ELEVATOR_INTERACT_DIST) {
-      lookTarget = { type: 'elevator' };
-      interactHint.style.display = 'block';
-      interactHint.textContent = '[E] Enter Elevator';
-      return;
-    }
-  }
-
-  lookTarget = null;
-  interactHint.style.display = 'none';
-}
-
-// ─── NPC AI ───────────────────────────────────────────────────────────────────
-function updateNPCs(dt) {
-  const openCells = getOpenCells();
-
-  npcs.forEach(npc => {
-    npc.idleTimer -= dt;
-
-    if (npc.idleTimer <= 0) {
-      // Pick new wander target
-      if (Math.random() < 0.3) {
-        // Follow player loosely
-        const spread = 2;
-        npc.target.set(
-          camera.position.x + (Math.random() - 0.5) * spread,
-          0,
-          camera.position.z + (Math.random() - 0.5) * spread
-        );
-      } else if (openCells.length > 0) {
-        const cell = openCells[Math.floor(Math.random() * openCells.length)];
-        npc.target.set(cell.wx, 0, cell.wz);
-      }
-      npc.idleTimer = 1 + Math.random() * 3;
-    }
-
-    // Move toward target
-    const dir = new THREE.Vector3().subVectors(npc.target, npc.mesh.position);
-    dir.y = 0;
-    const dist = dir.length();
-    if (dist > 0.3) {
-      dir.normalize();
-      const newPos = npc.mesh.position.clone().addScaledVector(dir, NPC_SPEED * dt);
-      if (!collidesWithWalls(newPos.x, newPos.z, 0.3)) {
-        npc.mesh.position.copy(newPos);
-        npc.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-      } else {
-        npc.idleTimer = 0; // pick new target next frame
-      }
-    }
-
-    // Bobbing walk animation
-    npc.mesh.position.y = Math.abs(Math.sin(clock.elapsedTime * 4 + npcs.indexOf(npc))) * 0.05;
-  });
-}
-
-let _openCellsCache = null;
-function getOpenCells() {
-  if (_openCellsCache) return _openCellsCache;
-  const grid = mapDef.grid;
-  const cells = [];
-  for (let r = 0; r < grid.length; r++) {
-    for (let c = 0; c < grid[0].length; c++) {
-      if (grid[r][c] === 0) {
-        cells.push({ wx: c * TILE + TILE / 2, wz: r * TILE + TILE / 2 });
-      }
-    }
-  }
-  _openCellsCache = cells;
-  return cells;
-}
-
-// ─── Collision ────────────────────────────────────────────────────────────────
-const PLAYER_RADIUS = 0.35;
-
-function collidesWithWalls(x, z, radius) {
-  return walls.some(w =>
-    x + radius > w.minX && x - radius < w.maxX &&
-    z + radius > w.minZ && z - radius < w.maxZ
-  );
-}
-
-// ─── Movement ─────────────────────────────────────────────────────────────────
-function updatePlayer(dt) {
-  const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-  const right   = new THREE.Vector3( Math.cos(yaw), 0, -Math.sin(yaw));
-
-  const move = new THREE.Vector3();
-  if (keys['KeyW'] || keys['ArrowUp'])    move.add(forward);
-  if (keys['KeyS'] || keys['ArrowDown'])  move.sub(forward);
-  if (keys['KeyA'] || keys['ArrowLeft'])  move.sub(right);
-  if (keys['KeyD'] || keys['ArrowRight']) move.add(right);
-
-  if (move.lengthSq() > 0) move.normalize();
-
-  const speed = PLAYER_SPEED * dt;
-
-  // Slide along walls
-  const nx = camera.position.x + move.x * speed;
-  const nz = camera.position.z + move.z * speed;
-
-  if (!collidesWithWalls(nx, camera.position.z, PLAYER_RADIUS)) {
-    camera.position.x = nx;
-  }
-  if (!collidesWithWalls(camera.position.x, nz, PLAYER_RADIUS)) {
-    camera.position.z = nz;
-  }
-
-  camera.position.y = PLAYER_HEIGHT;
-
-  // Apply yaw/pitch to camera
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = yaw;
-  camera.rotation.x = pitch;
+    loadMap(next);
+  }, 600);
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
 function updateHUD() {
-  panelStatus.textContent = `PANELS: ${panelsActivated} / ${mapDef.panelCount}`;
-  const ratio = panelsActivated / mapDef.panelCount;
-  panelStatus.style.color = ratio === 1 ? '#00ff66' : '#fff';
+  panelLabel.textContent = `PANELS: ${panelsActivated} / ${mapDef.panelCount}`;
+  panelLabel.style.color  = panelsActivated >= mapDef.panelCount ? '#00ff66' : '#fff';
+  panelTrack.innerHTML = '';
+  for (let i=0; i<mapDef.panelCount; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'panel-pip' + (i < panelsActivated ? ' done' : '');
+    panelTrack.appendChild(pip);
+  }
 }
 
 function updateCrewDots() {
   crewDotsEl.innerHTML = '';
-  npcs.forEach((npc, i) => {
-    const dot = document.createElement('span');
-    dot.className = 'crew-dot';
-    dot.style.background = '#' + npc.color.toString(16).padStart(6, '0');
-    crewDotsEl.appendChild(dot);
-  });
+  for (const npc of npcs) {
+    const d = document.createElement('div');
+    d.className = 'crew-dot';
+    d.style.background = '#' + npc.color.toString(16).padStart(6,'0');
+    crewDotsEl.appendChild(d);
+  }
 }
 
-function showMessage(text, duration) {
-  messageEl.innerHTML = text.replace('\n', '<br>');
+function showMessage(text, dur) {
+  messageEl.innerHTML = text.replace('\n','<br>');
   messageEl.style.display = 'block';
-  setTimeout(() => messageEl.style.display = 'none', duration);
+  setTimeout(() => messageEl.style.display = 'none', dur);
 }
 
-function flash(color, intensity) {
-  const hex = '#' + color.toString(16).padStart(6, '0');
-  elevatorFlash.style.background = hex;
-  elevatorFlash.style.opacity = intensity;
-  setTimeout(() => elevatorFlash.style.opacity = 0, 300);
+function doFlash(color, strength) {
+  flashEl.style.background = '#' + color.toString(16).padStart(6,'0');
+  flashEl.style.opacity = strength;
+  setTimeout(() => flashEl.style.opacity = 0, 350);
 }
 
-// ─── Main loop ────────────────────────────────────────────────────────────────
+// ─── Loop ─────────────────────────────────────────────────────────────────────
 function loop() {
-  frameId = requestAnimationFrame(loop);
+  raf = requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
-
   if (locked) {
     updatePlayer(dt);
     checkLookTarget();
   }
-
   updateNPCs(dt);
-
   renderer.render(scene, camera);
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+// ─── Utility ──────────────────────────────────────────────────────────────────
+function shuffle(a) {
+  for (let i=a.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
   }
-  return arr;
+  return a;
 }
