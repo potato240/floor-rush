@@ -320,9 +320,9 @@ function loadMap(mapKey) {
   npcs = [];
   lookTarget = null;
 
-  const c = mapDef.colors;
-  scene.background = new THREE.Color(c.ceiling).multiplyScalar(0.15);
-  scene.fog = new THREE.Fog(scene.background, 18, 55);
+  const bgColor = 0x0d0d14;
+  scene.background = new THREE.Color(bgColor);
+  scene.fog = new THREE.Fog(bgColor, 16, 50);
 
   buildMap();
   spawnPlayer();
@@ -665,8 +665,8 @@ function blocked(x, z, r) {
 
 // ─── Player update ────────────────────────────────────────────────────────────
 function updatePlayer(dt) {
-  const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
-  const rgt = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));
+  const fwd = new THREE.Vector3( Math.sin(camYaw), 0,  Math.cos(camYaw));
+  const rgt = new THREE.Vector3(-Math.cos(camYaw), 0,  Math.sin(camYaw));
   const move = new THREE.Vector3();
 
   if (keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
@@ -697,11 +697,16 @@ function updatePlayer(dt) {
   // Camera
   if (firstPerson) {
     if (player.mesh) player.mesh.visible = false;
-    camera.position.set(player.pos.x, player.pos.y + 1.55, player.pos.z);
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = Math.PI - camYaw;
-    camera.rotation.x = fpPitch;
-    camera.rotation.z = 0;
+    const eyeY = player.pos.y + 1.55;
+    camera.position.set(player.pos.x, eyeY, player.pos.z);
+    // Use lookAt so rotation is always correct regardless of camYaw value
+    const lookTarget3D = new THREE.Vector3(
+      player.pos.x + Math.sin(camYaw),
+      eyeY + Math.sin(fpPitch),
+      player.pos.z + Math.cos(camYaw)
+    );
+    camera.up.set(0, 1, 0);
+    camera.lookAt(lookTarget3D);
   } else {
     if (player.mesh) player.mesh.visible = true;
     // Walk camera back from player, collide with walls
