@@ -303,7 +303,11 @@ playBtn.addEventListener('click', () => {
 function startGame(mapKey) {
   if (raf) cancelAnimationFrame(raf);
   floorNum = 1;
-  loadMap(mapKey);
+  try {
+    loadMap(mapKey);
+  } catch(e) {
+    document.body.innerHTML = `<div style="position:fixed;inset:0;background:#000;color:#f55;padding:24px;font-family:monospace;font-size:13px;white-space:pre-wrap;overflow:auto;z-index:999">CRASH IN loadMap:\n\n${e.message}\n\n${e.stack}</div>`;
+  }
 }
 
 function loadMap(mapKey) {
