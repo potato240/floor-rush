@@ -259,8 +259,9 @@ let firstPerson = false;
 let fpPitch = 0;
 let walls = [];
 let panels = [], panelsActivated = 0;
-let elevatorDoor = null, elevatorOpen = false;
+let elevatorDoor = null, elevatorOpen = false, elevatorFilling = false;
 let elevatorPos = new THREE.Vector3();
+let elevatorDoorCollider = null;
 let npcs = [];
 let keys = {}, locked = false;
 let lookTarget = null;
@@ -314,7 +315,9 @@ function loadMap(mapKey) {
   panels = [];
   panelsActivated = 0;
   elevatorOpen = false;
+  elevatorFilling = false;
   elevatorDoor = null;
+  elevatorDoorCollider = null;
   walls = [];
   npcs = [];
   lookTarget = null;
@@ -393,32 +396,103 @@ function buildMap() {
     }
   }
 
-  // ── Elevator ────────────────────────────────────────────────────────────────
+  // ── Elevator: door-in-wall ───────────────────────────────────────────────────
   const ev = mapDef.elevator;
-  const ex = ev.x*TILE+TILE/2, ez = ev.z*TILE+TILE/2;
+  const evR = ev.z, evC = ev.x;
+  const ex = evC*TILE+TILE/2, ez = evR*TILE+TILE/2;
   elevatorPos.set(ex, 0, ez);
 
-  const shaftMat = new THREE.MeshLambertMaterial({
-    color: c.trim, emissive: c.trim, emissiveIntensity: 0.15
-  });
-  const shaft = new THREE.Mesh(new THREE.BoxGeometry(TILE-0.1, WALL_H, TILE-0.1), shaftMat);
-  shaft.position.set(ex, WALL_H/2, ez);
-  scene.add(shaft);
-  walls = walls.filter(w => !(w.minX<ex && w.maxX>ex && w.minZ<ez && w.maxZ>ez));
+  // Remove any existing wall box covering this cell
+  walls = walls.filter(w => !(w.minX < ex+0.1 && w.maxX > ex-0.1 && w.minZ < ez+0.1 && w.maxZ > ez-0.1));
 
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0x777777, emissive:0x333333, emissiveIntensity:0.3 });
-  elevatorDoor = new THREE.Mesh(new THREE.BoxGeometry(TILE*0.72, WALL_H-0.1, 0.18), doorMat);
-  elevatorDoor.position.set(ex, WALL_H/2, ez - TILE/2 + 0.1);
-  elevatorDoor.userData.openY  = WALL_H * 1.5;
-  elevatorDoor.userData.closedY= WALL_H/2;
+  // Find door direction: face of elevator cell that points toward spawn (and is accessible)
+  const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
+  const doorCands = [
+    {dr:-1,dc:0,nx:0,nz:-1},{dr:1,dc:0,nx:0,nz:1},
+    {dr:0,dc:-1,nx:-1,nz:0},{dr:0,dc:1,nx:1,nz:0},
+  ];
+  let doorDir = doorCands[0];
+  let bestScore = -Infinity;
+  for (const d of doorCands) {
+    const score = d.nx*(spX-ex) + d.nz*(spZ-ez);
+    if (score > bestScore && g[evR+d.dr]?.[evC+d.dc] === 0) {
+      bestScore = score; doorDir = d;
+    }
+  }
+
+  // Floor + ceiling for elevator cell (removed from wall above, now needs floor/ceil)
+  const evFloor = new THREE.Mesh(new THREE.PlaneGeometry(TILE,TILE),
+    new THREE.MeshLambertMaterial({ color: c.trim }));
+  evFloor.rotation.x = -Math.PI/2;
+  evFloor.position.set(ex, 0, ez);
+  scene.add(evFloor);
+  const evCeil = new THREE.Mesh(new THREE.PlaneGeometry(TILE,TILE),
+    new THREE.MeshLambertMaterial({ color: c.ceiling }));
+  evCeil.rotation.x = Math.PI/2;
+  evCeil.position.set(ex, WALL_H, ez);
+  scene.add(evCeil);
+
+  // 3 solid walls (sides that are NOT the door)
+  const evWallMat = new THREE.MeshLambertMaterial({ color: c.trim });
+  for (const d of doorCands) {
+    if (d.nx === doorDir.nx && d.nz === doorDir.nz) continue; // skip door side
+    // Only build wall panel if adjacent cell isn't already a wall (avoids Z-fighting)
+    if (g[evR+d.dr]?.[evC+d.dc] === 0) {
+      const isX = d.nx !== 0;
+      const wp = new THREE.Mesh(
+        new THREE.BoxGeometry(isX ? 0.15 : TILE, WALL_H, isX ? TILE : 0.15),
+        evWallMat
+      );
+      wp.position.set(ex + d.nx*(TILE/2-0.075), WALL_H/2, ez + d.nz*(TILE/2-0.075));
+      scene.add(wp);
+      walls.push({
+        minX: wp.position.x - (isX ? 0.15 : TILE)/2,
+        maxX: wp.position.x + (isX ? 0.15 : TILE)/2,
+        minZ: wp.position.z - (isX ? TILE : 0.15)/2,
+        maxZ: wp.position.z + (isX ? TILE : 0.15)/2,
+      });
+    }
+  }
+
+  // Door mesh — sits at the entrance face, slides up when opened
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+  const isXDoor = doorDir.nx !== 0;
+  elevatorDoor = new THREE.Mesh(
+    new THREE.BoxGeometry(isXDoor ? 0.15 : TILE*0.9, WALL_H, isXDoor ? TILE*0.9 : 0.15),
+    doorMat
+  );
+  elevatorDoor.position.set(
+    ex + doorDir.nx*(TILE/2 - 0.08),
+    WALL_H/2,
+    ez + doorDir.nz*(TILE/2 - 0.08)
+  );
+  elevatorDoor.userData.openY   = WALL_H + WALL_H/2 + 0.5;
+  elevatorDoor.userData.closedY = WALL_H/2;
   scene.add(elevatorDoor);
 
-  // Sign above elevator
-  const signGeo = new THREE.BoxGeometry(0.9, 0.35, 0.06);
+  // Door collider — blocks entrance until opened
+  elevatorDoorCollider = {
+    minX: elevatorDoor.position.x - (isXDoor ? 0.2 : TILE/2),
+    maxX: elevatorDoor.position.x + (isXDoor ? 0.2 : TILE/2),
+    minZ: elevatorDoor.position.z - (isXDoor ? TILE/2 : 0.2),
+    maxZ: elevatorDoor.position.z + (isXDoor ? TILE/2 : 0.2),
+  };
+  walls.push(elevatorDoorCollider);
+
+  // Glowing sign above door
   const signMat = new THREE.MeshBasicMaterial({ color: 0x00ff44 });
-  const sign = new THREE.Mesh(signGeo, signMat);
-  sign.position.set(ex, WALL_H-0.3, ez - TILE/2 + 0.06);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.08), signMat);
+  sign.position.set(
+    ex + doorDir.nx*(TILE/2 - 0.05),
+    WALL_H - 0.25,
+    ez + doorDir.nz*(TILE/2 - 0.05)
+  );
   scene.add(sign);
+
+  // Elevator point light
+  const evLight = new THREE.PointLight(c.trim, 1.2, 8);
+  evLight.position.set(ex, WALL_H-0.3, ez);
+  scene.add(evLight);
 
   // ── Panels ──────────────────────────────────────────────────────────────────
   const sides = findWallSides(g, rows, cols);
@@ -725,68 +799,155 @@ function updatePlayer(dt) {
   }
 }
 
+// ─── A* pathfinding ───────────────────────────────────────────────────────────
+function aStar(grid, sr, sc, gr, gc) {
+  const rows = grid.length, cols = grid[0].length;
+  if (grid[gr]?.[gc] !== 0) return null;
+  const K = (r,c) => r*1000+c;
+  const open = new Map(); // key -> f
+  const g = new Map();
+  const par = new Map();
+  const h = (r,c) => Math.abs(r-gr)+Math.abs(c-gc);
+  const sk = K(sr,sc);
+  open.set(sk, h(sr,sc)); g.set(sk,0);
+  const DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
+  while (open.size > 0) {
+    let bestK=null, bestF=Infinity;
+    for (const [k,f] of open) { if (f<bestF){bestF=f;bestK=k;} }
+    const r=Math.floor(bestK/1000), c=bestK%1000;
+    if (r===gr && c===gc) {
+      const path=[]; let cur=bestK;
+      while (par.has(cur)) {
+        path.unshift({ x:(cur%1000)*TILE+TILE/2, z:Math.floor(cur/1000)*TILE+TILE/2 });
+        cur=par.get(cur);
+      }
+      return path;
+    }
+    open.delete(bestK);
+    const gCur=g.get(bestK)||0;
+    for (const [dr,dc] of DIRS) {
+      const nr=r+dr,nc=c+dc;
+      if (nr<0||nr>=rows||nc<0||nc>=cols||grid[nr][nc]!==0) continue;
+      const nk=K(nr,nc), ng=gCur+1;
+      if (ng<(g.get(nk)||Infinity)) {
+        g.set(nk,ng); par.set(nk,bestK); open.set(nk,ng+h(nr,nc));
+      }
+    }
+  }
+  return null;
+}
+
+function worldToCell(x, z) {
+  return { r: Math.floor(z/TILE), c: Math.floor(x/TILE) };
+}
+
+function npcComputePath(npc, destX, destZ) {
+  const from = worldToCell(npc.mesh.position.x, npc.mesh.position.z);
+  const to   = worldToCell(destX, destZ);
+  const path = aStar(mapDef.grid, from.r, from.c, to.r, to.c);
+  npc.path = path || [];
+  npc.pathStep = 0;
+}
+
 // ─── NPC update ───────────────────────────────────────────────────────────────
 function updateNPCs(dt) {
   const cells = getOpenCells();
 
-  for (const npc of npcs) {
-    // Activating a panel
+  for (let i=0; i<npcs.length; i++) {
+    const npc = npcs[i];
+    const bob = Math.abs(Math.sin(clock.elapsedTime*6 + i*1.3)) * 0.05;
+
+    // ── Activating panel ──
     if (npc.activateTimer > 0) {
       npc.activateTimer -= dt;
       if (npc.activateTimer <= 0 && npc.targetPanel && !npc.targetPanel.userData.activated) {
         activatePanel(npc.targetPanel);
         npc.targetPanel = null;
+        npc.path = [];
       }
       continue;
     }
 
-    // Find a panel to seek
-    if (!npc.targetPanel || npc.targetPanel.userData.activated) {
-      npc.targetPanel = findNearestPanel(npc.mesh.position, panels);
+    // ── Inside elevator — stay put ──
+    if (elevatorOpen && isInElevator(npc.mesh.position)) {
+      npc.mesh.position.y = bob;
+      continue;
     }
 
-    let dest;
-    if (npc.targetPanel) {
-      dest = npc.targetPanel.userData.worldPos;
-    } else {
-      // No panels left — wander
-      npc.wanderTimer -= dt;
-      if (npc.wanderTimer <= 0 && cells.length > 0) {
-        const c = cells[Math.floor(Math.random()*cells.length)];
-        npc.wanderTarget.set(c.wx, 0, c.wz);
-        npc.wanderTimer = 2 + Math.random()*3;
+    // ── Go to elevator ──
+    if (elevatorOpen && elevatorFilling) {
+      if (!npc.path || npc.path.length === 0 || npc.elevatorTarget !== true) {
+        npcComputePath(npc, elevatorPos.x, elevatorPos.z);
+        npc.elevatorTarget = true;
       }
-      dest = npc.wanderTarget;
+      npcFollowPath(npc, dt, bob);
+      continue;
+    }
+    npc.elevatorTarget = false;
+
+    // ── Seek panel ──
+    if (!npc.targetPanel || npc.targetPanel.userData.activated) {
+      npc.targetPanel = findNearestPanel(npc.mesh.position);
+      if (npc.targetPanel) {
+        const wp = npc.targetPanel.userData.worldPos;
+        npcComputePath(npc, wp.x, wp.z);
+      }
     }
 
-    const dir = new THREE.Vector3(dest.x - npc.mesh.position.x, 0, dest.z - npc.mesh.position.z);
-    const dist = dir.length();
-
-    if (npc.targetPanel && dist < 1.4) {
-      // Stand in front of panel and activate
-      npc.activateTimer = PANEL_ACTIVATE_TIME;
-      npc.mesh.rotation.y = Math.atan2(-npc.targetPanel.userData.worldPos.x + npc.mesh.position.x,
-                                       -npc.targetPanel.userData.worldPos.z + npc.mesh.position.z);
-    } else if (dist > 0.4) {
-      dir.normalize();
-      const nx = npc.mesh.position.x + dir.x * NPC_SPEED * dt;
-      const nz = npc.mesh.position.z + dir.z * NPC_SPEED * dt;
-      if (!blocked(nx, npc.mesh.position.z, 0.3)) npc.mesh.position.x = nx;
-      if (!blocked(npc.mesh.position.x, nz, 0.3)) npc.mesh.position.z = nz;
-      npc.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-      npc.mesh.position.y = Math.abs(Math.sin(clock.elapsedTime*6 + npcs.indexOf(npc)*1.3))*0.05;
+    if (npc.targetPanel) {
+      const wp = npc.targetPanel.userData.worldPos;
+      const dist = Math.hypot(npc.mesh.position.x - wp.x, npc.mesh.position.z - wp.z);
+      if (dist < 1.5) {
+        npc.activateTimer = PANEL_ACTIVATE_TIME;
+        npc.path = [];
+        continue;
+      }
+      npcFollowPath(npc, dt, bob);
+    } else {
+      // Wander
+      npc.wanderTimer = (npc.wanderTimer||0) - dt;
+      if (npc.wanderTimer <= 0 && cells.length > 0) {
+        const cell = cells[Math.floor(Math.random()*cells.length)];
+        npcComputePath(npc, cell.wx, cell.wz);
+        npc.wanderTimer = 3 + Math.random()*4;
+      }
+      npcFollowPath(npc, dt, bob);
     }
   }
 }
 
-function findNearestPanel(pos, allPanels) {
-  let best = null, bestDist = Infinity;
-  for (const p of allPanels) {
+function npcFollowPath(npc, dt, bob) {
+  if (!npc.path || npc.path.length === 0) return;
+  if (npc.pathStep >= npc.path.length) { npc.path = []; return; }
+
+  const wp = npc.path[npc.pathStep];
+  const dx = wp.x - npc.mesh.position.x;
+  const dz = wp.z - npc.mesh.position.z;
+  const dist = Math.hypot(dx, dz);
+
+  if (dist < 0.35) { npc.pathStep++; return; }
+
+  const nx = npc.mesh.position.x + (dx/dist)*NPC_SPEED*dt;
+  const nz = npc.mesh.position.z + (dz/dist)*NPC_SPEED*dt;
+  if (!blocked(nx, npc.mesh.position.z, 0.28)) npc.mesh.position.x = nx;
+  if (!blocked(npc.mesh.position.x, nz, 0.28)) npc.mesh.position.z = nz;
+  npc.mesh.rotation.y = Math.atan2(dx, dz);
+  npc.mesh.position.y = bob;
+}
+
+function findNearestPanel(pos) {
+  let best=null, bestDist=Infinity;
+  for (const p of panels) {
     if (p.userData.activated) continue;
-    const d = pos.distanceTo(p.userData.worldPos);
-    if (d < bestDist) { bestDist = d; best = p; }
+    const d = Math.hypot(pos.x-p.userData.worldPos.x, pos.z-p.userData.worldPos.z);
+    if (d<bestDist) { bestDist=d; best=p; }
   }
   return best;
+}
+
+function isInElevator(pos) {
+  return Math.abs(pos.x-elevatorPos.x) < TILE/2-0.1 &&
+         Math.abs(pos.z-elevatorPos.z) < TILE/2-0.1;
 }
 
 function getOpenCells() {
@@ -819,14 +980,10 @@ function checkLookTarget() {
       }
     }
   }
-  if (elevatorOpen) {
-    const d = player.pos.distanceTo(elevatorPos);
-    if (d < INTERACT_DIST) {
-      lookTarget = { type:'elevator' };
-      interactHint.textContent = '[E] Enter Elevator';
-      interactHint.style.display = 'block';
-      return;
-    }
+  if (elevatorOpen && isInElevator(player.pos)) {
+    interactHint.textContent = 'Waiting for crew...';
+    interactHint.style.display = 'block';
+    return;
   }
   lookTarget = null;
   interactHint.style.display = 'none';
@@ -836,7 +993,6 @@ function checkLookTarget() {
 function interact() {
   if (!lookTarget) return;
   if (lookTarget.type === 'panel') activatePanel(lookTarget.obj);
-  else if (lookTarget.type === 'elevator') nextFloor();
 }
 
 function activatePanel(panel) {
@@ -853,7 +1009,10 @@ function activatePanel(panel) {
 
 function openElevator() {
   elevatorOpen = true;
-  showMessage('ALL PANELS ACTIVATED!\nHEAD TO THE ELEVATOR!', 2800);
+  elevatorFilling = true;
+  // Remove door collider so entities can walk through
+  if (elevatorDoorCollider) walls = walls.filter(w => w !== elevatorDoorCollider);
+  showMessage('ALL PANELS ACTIVATED!\nGET TO THE ELEVATOR!', 2800);
   doFlash(0x00ffcc, 0.6);
   animateDoor();
 }
@@ -862,7 +1021,7 @@ function animateDoor() {
   const door = elevatorDoor;
   const target = door.userData.openY;
   function step() {
-    door.position.y += 0.08;
+    door.position.y += 0.1;
     if (door.position.y < target) requestAnimationFrame(step);
     else door.position.y = target;
   }
@@ -870,14 +1029,22 @@ function animateDoor() {
 }
 
 function nextFloor() {
+  elevatorFilling = false;
   floorNum++;
   doFlash(0xffffff, 0.9);
-  const keys = Object.keys(MAPS);
-  const next = keys[floorNum % keys.length];
+  const mapKeys = Object.keys(MAPS);
+  const next = mapKeys[floorNum % mapKeys.length];
   setTimeout(() => {
     showMessage(`FLOOR ${floorNum}`, 1500);
     loadMap(next);
   }, 600);
+}
+
+function checkElevatorFill() {
+  if (!elevatorOpen || !elevatorFilling) return;
+  if (!isInElevator(player.pos)) return;
+  const allNpcsIn = npcs.every(n => isInElevator(n.mesh.position));
+  if (allNpcsIn) nextFloor();
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
@@ -931,6 +1098,7 @@ function loop() {
     checkLookTarget();
   }
   updateNPCs(dt);
+  checkElevatorFill();
   renderer.render(scene, camera);
 }
 
