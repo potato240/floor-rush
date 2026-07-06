@@ -267,6 +267,7 @@ let walls = [];
 let panels = [], panelsActivated = 0;
 let elevatorDoor = null, elevatorOpen = false, elevatorFilling = false;
 let elevatorPos = new THREE.Vector3();
+let elevatorCell = { r:0, c:0 };
 let currentGrid = null;
 let elevatorDoorCollider = null;
 let npcs = [];
@@ -357,21 +358,20 @@ function loadMap(mapKey) {
 // ─── Pick a random wall cell with one open neighbour for the elevator ─────────
 function pickElevatorCell(g, rows, cols) {
   const DIRS4 = [[-1,0],[1,0],[0,-1],[0,1]];
-  const byCount = [[], [], [], [], []];
+  const singles = [];
   for (let r = 1; r < rows-1; r++) {
     for (let c = 1; c < cols-1; c++) {
       if (g[r][c] !== 1) continue;
       const openD = DIRS4.filter(([dr,dc]) => g[r+dr]?.[c+dc] === 0);
-      if (openD.length > 0 && openD.length <= 4) {
+      // Only use cells with exactly 1 open neighbour so there's one way in/out
+      if (openD.length === 1) {
         const [dr, dc] = openD[0];
-        byCount[openD.length].push({ r, c, dr, dc, nx: dc, nz: dr });
+        singles.push({ r, c, dr, dc, nx: dc, nz: dr });
       }
     }
   }
-  for (let n = 1; n <= 4; n++) {
-    if (byCount[n].length) return byCount[n][Math.floor(Math.random()*byCount[n].length)];
-  }
-  // fallback: use first entry from mapDef if defined
+  if (singles.length > 0) return singles[Math.floor(Math.random()*singles.length)];
+  // Fallback
   const ev = mapDef.elevator;
   return { r: ev.z, c: ev.x, dr: 0, dc: -1, nx: -1, nz: 0 };
 }
@@ -447,6 +447,7 @@ function buildMap() {
 
   const ex = evC*TILE+TILE/2, ez = evR*TILE+TILE/2;
   elevatorPos.set(ex, 0, ez);
+  elevatorCell = { r: evR, c: evC };
 
   // Replace wall mesh for this cell with elevator floor + ceiling
   walls = walls.filter(w => !(w.minX < ex+0.1 && w.maxX > ex-0.1 && w.minZ < ez+0.1 && w.maxZ > ez-0.1));
@@ -757,8 +758,8 @@ function spawnNPCs() {
 // ─── Enemy mesh ───────────────────────────────────────────────────────────────
 function makeEnemy() {
   const grp = new THREE.Group();
-  const bMat = new THREE.MeshLambertMaterial({ color: 0x1a0000 });
-  const eMat = new THREE.MeshBasicMaterial({ color: 0xff1100 });
+  const bMat = new THREE.MeshLambertMaterial({ color: 0xbb1100, emissive: 0x440000, emissiveIntensity: 1 });
+  const eMat = new THREE.MeshBasicMaterial({ color: 0xffee00 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.4), bMat);
   body.position.y = 0.38; grp.add(body);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.44, 0.48), bMat);
@@ -796,7 +797,7 @@ function makeDeadHead(color) {
 function spawnEnemies() {
   const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
   const pool = getOpenCells().filter(cell =>
-    Math.hypot(cell.wx-spX, cell.wz-spZ) > TILE*4 &&
+    Math.hypot(cell.wx-spX, cell.wz-spZ) > TILE*2 &&
     Math.hypot(cell.wx-elevatorPos.x, cell.wz-elevatorPos.z) > TILE*2
   );
   shuffle(pool);
@@ -1035,7 +1036,13 @@ function worldToCell(x, z) {
 function npcComputePath(npc, destX, destZ) {
   const from = worldToCell(npc.mesh.position.x, npc.mesh.position.z);
   const to   = worldToCell(destX, destZ);
-  const path = aStar(currentGrid, from.r, from.c, to.r, to.c);
+  // Block elevator cell in pathfinding while door is closed
+  let grid = currentGrid;
+  if (!elevatorOpen && grid) {
+    grid = currentGrid.map(r => [...r]);
+    grid[elevatorCell.r][elevatorCell.c] = 1;
+  }
+  const path = aStar(grid, from.r, from.c, to.r, to.c);
   npc.path = path || [];
   npc.pathStep = 0;
 }
