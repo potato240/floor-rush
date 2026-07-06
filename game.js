@@ -215,7 +215,6 @@ const messageEl     = document.getElementById('message');
 const flashEl       = document.getElementById('flash');
 const carryHint     = document.getElementById('carry-hint');
 const spSegs        = [0,1,2].map(i => document.getElementById(`sp-${i}`));
-const sprintFill    = document.getElementById('sprint-fill');
 
 // ─── Player choices ───────────────────────────────────────────────────────────
 let chosenColor = AU_COLORS[0].hex;
@@ -817,7 +816,14 @@ function spawnEnemies() {
 
 // ─── HP / damage ─────────────────────────────────────────────────────────────
 function updateStaminaHUD() {
-  spSegs.forEach((s,i) => s.classList.toggle('lost', i >= player.hp));
+  // Segments 0..hp-1 are available; within those, sprint level fills from left.
+  // States: cyan (sprint available), depleted (sprint empty), lost/red (HP gone).
+  const litSprint = Math.ceil(player.stamina / 100 * player.hp);
+  spSegs.forEach((s, i) => {
+    const hpLost = i >= player.hp;
+    s.classList.toggle('lost',     hpLost);
+    s.classList.toggle('depleted', !hpLost && i >= litSprint);
+  });
 }
 
 function damagePlayer() {
@@ -976,8 +982,7 @@ function updatePlayer(dt) {
   } else {
     player.stamina = Math.min(100, player.stamina + 20 * dt);
   }
-  sprintFill.style.width = player.stamina + '%';
-  sprintFill.classList.toggle('empty', player.stamina <= 0);
+  updateStaminaHUD();
   const spd = sprinting ? PLAYER_SPEED * SPRINT_MULT : PLAYER_SPEED;
 
   if (move.lengthSq() > 0) {
