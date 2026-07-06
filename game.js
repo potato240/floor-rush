@@ -18,6 +18,12 @@ const SPRINT_MULT    = 1.75;
 const ENEMY_SIGHT    = 12;
 const ENEMY_FORGET   = 22;
 const NPC_PANEL_SIGHT = 10;
+const MUMMY_SPEED    = 2.0;
+const MUMMY_DMG_CD   = 2.5;
+const MUMMY_SIGHT    = 14;
+const MUMMY_FORGET   = 30;
+const TRAP_DMG_CD    = 3.0;
+const LADDER_CD      = 2.0;
 
 // ─── Among Us colours ─────────────────────────────────────────────────────────
 const AU_COLORS = [
@@ -175,6 +181,49 @@ const MAPS = {
     elevator:{ x:18, z:13 },
   },
 
+  pyramid:{
+    name:'PYRAMID', panelCount:15,
+    enemyCount:1, mummyCount:3,
+    colors:{ floor:0xc8a96e, ceiling:0x6b4c2a, wall:0xd4b483, trim:0xffd700, light:0xffcc55 },
+    grid:[
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,0,1,1,0,0,1,1,0,0,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ],
+    spawn:{ x:12, z:23 },
+    elevator:{ x:12, z:4 },
+    ladders:[
+      { from:{r:15,c:7},  to:{r:6,c:9}  },
+      { from:{r:15,c:17}, to:{r:6,c:15} },
+    ],
+    traps:[
+      {r:10,c:12},{r:14,c:12},{r:9,c:8},{r:9,c:16},{r:18,c:12},{r:12,c:6},
+    ],
+  },
+
   carpark:{
     name:'CAR PARK', panelCount:6,
     colors:{ floor:0x4a5568, ceiling:0x2d3748, wall:0x5a6a7a, trim:0xffee58, light:0xfff59d },
@@ -276,6 +325,7 @@ let currentGrid = null;
 let elevatorDoorCollider = null;
 let npcs = [];
 let enemies = [], deadHeads = [];
+let mummies = [], ladderPairs = [], trapCells = [];
 let keys = {}, locked = false;
 let lookTarget = null;
 let raf, clock = new THREE.Clock();
@@ -339,6 +389,7 @@ function loadMap(mapKey) {
   walls = [];
   npcs = [];
   enemies = [];
+  mummies = []; ladderPairs = []; trapCells = [];
   for (const dh of deadHeads) scene.remove(dh.grp);
   deadHeads = [];
   lookTarget = null;
@@ -351,6 +402,7 @@ function loadMap(mapKey) {
   spawnPlayer();
   spawnNPCs();
   spawnEnemies();
+  spawnMummies();
   updateHUD();
   updateCrewDots();
   floorLabel.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
@@ -526,6 +578,27 @@ function buildMap() {
   );
   shuffle(sides);
   sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
+
+  // ── Ladders ──────────────────────────────────────────────────────────────────
+  ladderPairs = [];
+  if (mapDef.ladders) {
+    for (const lad of mapDef.ladders) {
+      const fp = new THREE.Vector3(lad.from.c*TILE+TILE/2, 0, lad.from.r*TILE+TILE/2);
+      const tp = new THREE.Vector3(lad.to.c*TILE+TILE/2, 0, lad.to.r*TILE+TILE/2);
+      buildLadderMesh(fp.x, fp.z); buildLadderMesh(tp.x, tp.z);
+      ladderPairs.push({ fromPos:fp, toPos:tp, cooldown:0 });
+    }
+  }
+
+  // ── Spike traps ───────────────────────────────────────────────────────────────
+  trapCells = [];
+  if (mapDef.traps) {
+    for (const t of mapDef.traps) {
+      const pos = new THREE.Vector3(t.c*TILE+TILE/2, 0, t.r*TILE+TILE/2);
+      buildTrapMesh(pos.x, pos.z);
+      trapCells.push({ pos, cooldown:0 });
+    }
+  }
 }
 
 function findWallSides(g, rows, cols) {
@@ -806,7 +879,8 @@ function spawnEnemies() {
     Math.hypot(cell.wx-elevatorPos.x, cell.wz-elevatorPos.z) > TILE*2
   );
   shuffle(pool);
-  for (let i=0; i<Math.min(ENEMY_COUNT, pool.length); i++) {
+  const eCount = mapDef.enemyCount ?? ENEMY_COUNT;
+  for (let i=0; i<Math.min(eCount, pool.length); i++) {
     const mesh = makeEnemy();
     mesh.position.set(pool[i].wx, 0, pool[i].wz);
     scene.add(mesh);
@@ -875,6 +949,143 @@ function revive(dh) {
     const npc = dh.entity;
     npc.dead = false; npc.hp = 3; npc.mesh.visible = true;
     npc.mesh.position.set(dh.grp.position.x, 0, dh.grp.position.z);
+  }
+}
+
+// ─── Ladder mesh ─────────────────────────────────────────────────────────────
+function buildLadderMesh(wx, wz) {
+  const woodMat = new THREE.MeshLambertMaterial({ color:0x8B4513 });
+  const darkMat = new THREE.MeshLambertMaterial({ color:0x5C2A0A });
+  for (const ox of [-0.25, 0.25]) {
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,WALL_H,6), woodMat);
+    rail.position.set(wx+ox, WALL_H/2, wz); scene.add(rail);
+  }
+  for (let y = 0.4; y < WALL_H-0.1; y += 0.55) {
+    const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.5,6), darkMat);
+    rung.rotation.z = Math.PI/2; rung.position.set(wx, y, wz); scene.add(rung);
+  }
+  const marker = new THREE.Mesh(new THREE.CircleGeometry(0.55,10),
+    new THREE.MeshBasicMaterial({color:0xffdd00, side:THREE.DoubleSide}));
+  marker.rotation.x = -Math.PI/2; marker.position.set(wx, 0.02, wz); scene.add(marker);
+}
+
+// ─── Trap mesh ────────────────────────────────────────────────────────────────
+function buildTrapMesh(wx, wz) {
+  const plateMat = new THREE.MeshLambertMaterial({ color:0x444444 });
+  const spikeMat = new THREE.MeshLambertMaterial({ color:0xbbbbbb });
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(TILE*0.7,0.06,TILE*0.7), plateMat);
+  plate.position.set(wx, 0.03, wz); scene.add(plate);
+  for (let sx=-1; sx<=1; sx++) for (let sz=-1; sz<=1; sz++) {
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.07,0.42,4), spikeMat);
+    spike.position.set(wx+sx*0.55, 0.24, wz+sz*0.55); scene.add(spike);
+  }
+  const warn = new THREE.Mesh(new THREE.RingGeometry(TILE*0.34,TILE*0.39,12),
+    new THREE.MeshBasicMaterial({color:0xff2200, side:THREE.DoubleSide}));
+  warn.rotation.x = -Math.PI/2; warn.position.set(wx, 0.04, wz); scene.add(warn);
+}
+
+// ─── Mummy mesh ───────────────────────────────────────────────────────────────
+function buildMummyMesh() {
+  const grp    = new THREE.Group();
+  const skin   = new THREE.MeshLambertMaterial({ color:0xd4b896 });
+  const wrap   = new THREE.MeshLambertMaterial({ color:0xa08060 });
+  const eyeMat = new THREE.MeshBasicMaterial({ color:0xff2200 });
+  // body
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.32,1.0,8), skin);
+  body.position.y = 0.5; grp.add(body);
+  // bandage strips
+  for (let y = 0.15; y < 1.05; y += 0.28) {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.31,0.045,4,10), wrap);
+    band.rotation.x = Math.PI/2; band.position.y = y; grp.add(band);
+  }
+  // head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22,8,6), skin);
+  head.position.y = 1.22; grp.add(head);
+  const headWrap = new THREE.Mesh(new THREE.SphereGeometry(0.24,8,4), wrap);
+  headWrap.scale.y = 0.5; headWrap.position.y = 1.22; grp.add(headWrap);
+  // eyes
+  for (const ox of [-0.08, 0.08]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04,6,4), eyeMat);
+    eye.position.set(ox, 1.26, -0.17); grp.add(eye);
+  }
+  const glow = new THREE.PointLight(0xff1100, 0.6, 3.0);
+  glow.position.y = 1.1; grp.add(glow);
+  return grp;
+}
+
+// ─── Spawn mummies ────────────────────────────────────────────────────────────
+function spawnMummies() {
+  const count = mapDef.mummyCount || 0;
+  if (!count) return;
+  const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
+  const pool = getOpenCells().filter(c =>
+    Math.hypot(c.wx-spX,c.wz-spZ) > TILE*3 &&
+    Math.hypot(c.wx-elevatorPos.x,c.wz-elevatorPos.z) > TILE*2
+  );
+  shuffle(pool);
+  for (let i=0; i<Math.min(count,pool.length); i++) {
+    const mesh = buildMummyMesh();
+    mesh.position.set(pool[i].wx, 0, pool[i].wz); scene.add(mesh);
+    mummies.push({ mesh, path:[], pathStep:0, pathTimer:0, damageCooldown:0,
+                   alerted:false, wanderTimer:Math.random()*4, alertTarget:null });
+  }
+}
+
+// ─── Mummy AI ─────────────────────────────────────────────────────────────────
+function updateMummies(dt) {
+  const allCells = getOpenCells();
+  for (const mu of mummies) {
+    mu.damageCooldown = Math.max(0, mu.damageCooldown - dt);
+    const bob = Math.abs(Math.sin(clock.elapsedTime*4 + mu.damageCooldown))*0.03;
+
+    let sightTarget=null, sightDist=Infinity;
+    if (!player.dead) {
+      const d = mu.mesh.position.distanceTo(player.pos);
+      if (d < MUMMY_SIGHT && d < sightDist) { sightDist=d; sightTarget=player; }
+    }
+    for (const npc of npcs) {
+      if (npc.dead) continue;
+      const d = mu.mesh.position.distanceTo(npc.mesh.position);
+      if (d < MUMMY_SIGHT && d < sightDist) { sightDist=d; sightTarget=npc; }
+    }
+    if (sightTarget) { mu.alerted=true; mu.alertTarget=sightTarget; }
+
+    if (!mu.alerted) {
+      mu.wanderTimer -= dt;
+      if ((mu.wanderTimer<=0 || mu.path.length===0) && allCells.length>0) {
+        const cell = allCells[Math.floor(Math.random()*allCells.length)];
+        npcComputePath(mu, cell.wx, cell.wz);
+        mu.wanderTimer = 4 + Math.random()*5;
+      }
+      npcFollowPath(mu, dt, bob, MUMMY_SPEED); continue;
+    }
+
+    const tgt  = mu.alertTarget;
+    const tpos = tgt===player ? player.pos : tgt.mesh.position;
+    if (!tgt || tgt.dead || mu.mesh.position.distanceTo(tpos) > MUMMY_FORGET) {
+      mu.alerted=false; mu.alertTarget=null; mu.path=[]; continue;
+    }
+    mu.pathTimer -= dt;
+    if (mu.pathTimer<=0 || mu.path.length===0) {
+      npcComputePath(mu, tpos.x, tpos.z);
+      mu.pathTimer = 1.2 + Math.random()*0.5;
+    }
+    npcFollowPath(mu, dt, bob, MUMMY_SPEED);
+
+    if (mu.damageCooldown<=0) {
+      const hit = !player.dead && mu.mesh.position.distanceTo(player.pos) < 0.75;
+      if (hit) {
+        damagePlayer(); if (!player.dead) damagePlayer(); // 2 HP
+        mu.damageCooldown = MUMMY_DMG_CD;
+      } else {
+        for (const npc of npcs) {
+          if (!npc.dead && mu.mesh.position.distanceTo(npc.mesh.position) < 0.75) {
+            damageNPC(npc); damageNPC(npc);
+            mu.damageCooldown = MUMMY_DMG_CD; break;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -995,6 +1206,28 @@ function updatePlayer(dt) {
     if (!blocked(player.pos.x, nz, PR)) player.pos.z = nz;
   } else {
     player.speed = 0;
+  }
+
+  // ── Traps ──
+  if (!player.dead) {
+    for (const trap of trapCells) {
+      trap.cooldown = Math.max(0, trap.cooldown - dt);
+      if (trap.cooldown<=0 && Math.hypot(player.pos.x-trap.pos.x, player.pos.z-trap.pos.z) < TILE*0.38) {
+        damagePlayer(); trap.cooldown = TRAP_DMG_CD;
+      }
+    }
+  }
+  // ── Ladders ──
+  if (!player.dead) {
+    for (const pair of ladderPairs) {
+      pair.cooldown = Math.max(0, pair.cooldown - dt);
+      if (pair.cooldown > 0) continue;
+      if (player.pos.distanceTo(pair.fromPos) < 0.9) {
+        player.pos.copy(pair.toPos); pair.cooldown = LADDER_CD; break;
+      } else if (player.pos.distanceTo(pair.toPos) < 0.9) {
+        player.pos.copy(pair.fromPos); pair.cooldown = LADDER_CD; break;
+      }
+    }
   }
 
   // Update carried head position
@@ -1184,6 +1417,15 @@ function updateNPCs(dt) {
         npc.wanderTimer = 3 + Math.random()*4;
       }
       npcFollowPath(npc, dt, bob);
+    }
+
+    // Trap check
+    if (!npc.dead) {
+      for (const trap of trapCells) {
+        if (trap.cooldown<=0 && Math.hypot(npc.mesh.position.x-trap.pos.x, npc.mesh.position.z-trap.pos.z) < TILE*0.38) {
+          damageNPC(npc); trap.cooldown = TRAP_DMG_CD; break;
+        }
+      }
     }
   }
 }
@@ -1414,6 +1656,7 @@ function loop() {
     }
     updateNPCs(dt);
     updateEnemies(dt);
+    updateMummies(dt);
     checkElevatorFill();
     renderer.render(scene, camera);
   } catch(e) {
