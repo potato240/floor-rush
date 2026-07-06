@@ -15,6 +15,9 @@ const ENEMY_COUNT    = 2;
 const ENEMY_SPEED    = 3.6;
 const ENEMY_DMG_CD   = 1.2;
 const SPRINT_MULT    = 1.75;
+const ENEMY_SIGHT    = 12;
+const ENEMY_FORGET   = 22;
+const NPC_PANEL_SIGHT = 10;
 
 // ─── Among Us colours ─────────────────────────────────────────────────────────
 const AU_COLORS = [
@@ -267,6 +270,7 @@ let walls = [];
 let panels = [], panelsActivated = 0;
 let elevatorDoor = null, elevatorOpen = false, elevatorFilling = false;
 let elevatorPos = new THREE.Vector3();
+let elevatorEntryPos = new THREE.Vector3();
 let elevatorCell = { r:0, c:0 };
 let currentGrid = null;
 let elevatorDoorCollider = null;
@@ -448,6 +452,7 @@ function buildMap() {
   const ex = evC*TILE+TILE/2, ez = evR*TILE+TILE/2;
   elevatorPos.set(ex, 0, ez);
   elevatorCell = { r: evR, c: evC };
+  elevatorEntryPos.set((evC + doorDir.dc)*TILE + TILE/2, 0, (evR + doorDir.dr)*TILE + TILE/2);
 
   // Replace wall mesh for this cell with elevator floor + ceiling
   walls = walls.filter(w => !(w.minX < ex+0.1 && w.maxX > ex-0.1 && w.minZ < ez+0.1 && w.maxZ > ez-0.1));
@@ -805,7 +810,7 @@ function spawnEnemies() {
     const mesh = makeEnemy();
     mesh.position.set(pool[i].wx, 0, pool[i].wz);
     scene.add(mesh);
-    enemies.push({ mesh, path:[], pathStep:0, pathTimer:Math.random(), damageCooldown:0 });
+    enemies.push({ mesh, path:[], pathStep:0, pathTimer:0, damageCooldown:0, alerted:false, wanderTimer:Math.random()*3 });
   }
 }
 
@@ -868,28 +873,61 @@ function revive(dh) {
 
 // ─── Enemy AI ─────────────────────────────────────────────────────────────────
 function updateEnemies(dt) {
+  const allCells = getOpenCells();
+  const wanderCells = elevatorOpen ? allCells : allCells.filter(
+    cell => Math.hypot(cell.wx - elevatorPos.x, cell.wz - elevatorPos.z) > TILE
+  );
+
   for (const en of enemies) {
     en.damageCooldown = Math.max(0, en.damageCooldown - dt);
+    const bob = Math.abs(Math.sin(clock.elapsedTime*9 + en.damageCooldown))*0.04;
 
-    // find nearest living target
-    let tpos = null, tdist = Infinity;
+    // Check if any living target is in sight range
+    let sightTarget = null, sightDist = Infinity;
     if (!player.dead) {
       const d = en.mesh.position.distanceTo(player.pos);
-      if (d < tdist) { tdist = d; tpos = player.pos; }
+      if (d < ENEMY_SIGHT && d < sightDist) { sightDist = d; sightTarget = player; }
     }
     for (const npc of npcs) {
       if (npc.dead) continue;
       const d = en.mesh.position.distanceTo(npc.mesh.position);
-      if (d < tdist) { tdist = d; tpos = npc.mesh.position; }
+      if (d < ENEMY_SIGHT && d < sightDist) { sightDist = d; sightTarget = npc; }
     }
-    if (!tpos) continue;
+
+    if (sightTarget) {
+      en.alerted = true;
+      en.alertTarget = sightTarget;
+    }
+
+    if (!en.alerted) {
+      // Wander
+      en.wanderTimer -= dt;
+      if ((en.wanderTimer <= 0 || en.path.length === 0) && wanderCells.length > 0) {
+        const cell = wanderCells[Math.floor(Math.random()*wanderCells.length)];
+        npcComputePath(en, cell.wx, cell.wz);
+        en.wanderTimer = 3 + Math.random()*4;
+      }
+      npcFollowPath(en, dt, bob, ENEMY_SPEED);
+      continue;
+    }
+
+    // Chasing
+    const tgt = en.alertTarget;
+    const tpos = tgt === player ? player.pos : tgt.mesh.position;
+
+    if (!tgt || tgt.dead || en.mesh.position.distanceTo(tpos) > ENEMY_FORGET) {
+      en.alerted = false;
+      en.alertTarget = null;
+      en.path = [];
+      continue;
+    }
 
     en.pathTimer -= dt;
     if (en.pathTimer <= 0 || en.path.length === 0) {
       npcComputePath(en, tpos.x, tpos.z);
       en.pathTimer = 0.9 + Math.random()*0.4;
     }
-    npcFollowPath(en, dt, Math.abs(Math.sin(clock.elapsedTime*9 + en.damageCooldown))*0.04, ENEMY_SPEED);
+    npcFollowPath(en, dt, bob, ENEMY_SPEED);
 
     // deal damage on contact
     if (en.damageCooldown <= 0) {
@@ -1087,7 +1125,7 @@ function updateNPCs(dt) {
     // ── Go to elevator ──
     if (elevatorOpen && elevatorFilling) {
       if (!npc.path || npc.path.length === 0 || npc.elevatorTarget !== true) {
-        npcComputePath(npc, elevatorPos.x, elevatorPos.z);
+        npcComputePath(npc, elevatorEntryPos.x, elevatorEntryPos.z);
         npc.elevatorTarget = true;
       }
       npcFollowPath(npc, dt, bob);
@@ -1104,9 +1142,12 @@ function updateNPCs(dt) {
 
     // ── Seek panel ──
     if (!npc.carrying && (!npc.targetPanel || npc.targetPanel.userData.activated)) {
-      npc.targetPanel = findNearestPanel(npc.mesh.position);
-      if (npc.targetPanel) {
-        const wp = npc.targetPanel.userData.worldPos;
+      npc.targetPanel = null;
+      // Only target a panel if it's within detection range (wander-until-detect)
+      const nearPanel = findPanelInRange(npc.mesh.position, NPC_PANEL_SIGHT);
+      if (nearPanel) {
+        npc.targetPanel = nearPanel;
+        const wp = nearPanel.userData.worldPos;
         npcComputePath(npc, wp.x, wp.z);
       }
     }
@@ -1162,9 +1203,22 @@ function findNearestPanel(pos) {
   return best;
 }
 
+function findPanelInRange(pos, range) {
+  let best=null, bestDist=Infinity;
+  for (const p of panels) {
+    if (p.userData.activated) continue;
+    const d = Math.hypot(pos.x-p.userData.worldPos.x, pos.z-p.userData.worldPos.z);
+    if (d < range && d < bestDist) { bestDist=d; best=p; }
+  }
+  return best;
+}
+
 function isInElevator(pos) {
-  return Math.abs(pos.x-elevatorPos.x) < TILE/2-0.1 &&
-         Math.abs(pos.z-elevatorPos.z) < TILE/2-0.1;
+  // Accept elevator cell OR the entry cell just outside the door
+  return (Math.abs(pos.x-elevatorPos.x) < TILE/2+0.3 &&
+          Math.abs(pos.z-elevatorPos.z) < TILE/2+0.3) ||
+         (Math.abs(pos.x-elevatorEntryPos.x) < TILE/2-0.1 &&
+          Math.abs(pos.z-elevatorEntryPos.z) < TILE/2-0.1);
 }
 
 function getOpenCells() {
