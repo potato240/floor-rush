@@ -805,41 +805,37 @@ function updatePlayer(dt) {
   }
 }
 
-// ─── A* pathfinding ───────────────────────────────────────────────────────────
+// ─── BFS pathfinding ──────────────────────────────────────────────────────────
 function aStar(grid, sr, sc, gr, gc) {
   const rows = grid.length, cols = grid[0].length;
-  if (grid[gr]?.[gc] !== 0) return null;
-  const K = (r,c) => r*1000+c;
-  const open = new Map(); // key -> f
-  const g = new Map();
-  const par = new Map();
-  const h = (r,c) => Math.abs(r-gr)+Math.abs(c-gc);
-  const sk = K(sr,sc);
-  open.set(sk, h(sr,sc)); g.set(sk,0);
+  if (grid[sr]?.[sc] !== 0 || grid[gr]?.[gc] !== 0) return null;
+  if (sr === gr && sc === gc) return [];
+  const K = (r,c) => r * cols + c;
+  const visited = new Uint8Array(rows * cols);
+  const par = new Int32Array(rows * cols).fill(-1);
+  const queue = [sr, sc];
+  visited[K(sr,sc)] = 1;
   const DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
-  let iters = 0;
-  while (open.size > 0 && ++iters < 100000) {
-    let bestK=null, bestF=Infinity;
-    for (const [k,f] of open) { if (f<bestF){bestF=f;bestK=k;} }
-    if (bestK === null) break;
-    const r=Math.floor(bestK/1000), c=bestK%1000;
-    if (r===gr && c===gc) {
-      const path=[]; let cur=bestK;
-      while (par.has(cur)) {
-        path.unshift({ x:(cur%1000)*TILE+TILE/2, z:Math.floor(cur/1000)*TILE+TILE/2 });
-        cur=par.get(cur);
+  let head = 0;
+  while (head < queue.length) {
+    const r = queue[head++], c = queue[head++];
+    if (r === gr && c === gc) {
+      const path = [];
+      let kr = r, kc = c;
+      while (kr !== sr || kc !== sc) {
+        path.unshift({ x: kc*TILE+TILE/2, z: kr*TILE+TILE/2 });
+        const p = par[K(kr,kc)];
+        kr = Math.floor(p / cols);
+        kc = p % cols;
       }
       return path;
     }
-    open.delete(bestK);
-    const gCur=g.get(bestK)||0;
     for (const [dr,dc] of DIRS) {
-      const nr=r+dr,nc=c+dc;
-      if (nr<0||nr>=rows||nc<0||nc>=cols||grid[nr][nc]!==0) continue;
-      const nk=K(nr,nc), ng=gCur+1;
-      if (ng<(g.get(nk)||Infinity)) {
-        g.set(nk,ng); par.set(nk,bestK); open.set(nk,ng+h(nr,nc));
-      }
+      const nr=r+dr, nc=c+dc;
+      if (nr<0||nr>=rows||nc<0||nc>=cols||grid[nr][nc]!==0||visited[K(nr,nc)]) continue;
+      visited[K(nr,nc)] = 1;
+      par[K(nr,nc)] = K(r,c);
+      queue.push(nr, nc);
     }
   }
   return null;
@@ -1106,7 +1102,7 @@ function loop() {
       updatePlayer(dt);
       checkLookTarget();
     }
-    // updateNPCs(dt); // DEBUG: skip AI to test freeze
+    updateNPCs(dt);
     checkElevatorFill();
     renderer.render(scene, camera);
   } catch(e) {
