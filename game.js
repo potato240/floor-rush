@@ -11,6 +11,10 @@ const CAM_MIN_PITCH  = 0.05;
 const CAM_MAX_PITCH  = 0.65;
 const INTERACT_DIST  = 2.8;
 const PANEL_ACTIVATE_TIME = 1.8;
+const ENEMY_COUNT    = 2;
+const ENEMY_SPEED    = 3.6;
+const ENEMY_DMG_CD   = 1.2;
+const SPRINT_MULT    = 1.75;
 
 // ─── Among Us colours ─────────────────────────────────────────────────────────
 const AU_COLORS = [
@@ -206,6 +210,8 @@ const interactHint  = document.getElementById('interact-hint');
 const crewDotsEl    = document.getElementById('crew-dots');
 const messageEl     = document.getElementById('message');
 const flashEl       = document.getElementById('flash');
+const carryHint     = document.getElementById('carry-hint');
+const spSegs        = [0,1,2].map(i => document.getElementById(`sp-${i}`));
 
 // ─── Player choices ───────────────────────────────────────────────────────────
 let chosenColor = AU_COLORS[0].hex;
@@ -253,7 +259,7 @@ function resize() {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let scene, mapDef, floorNum = 1;
-let player = { pos: new THREE.Vector3(), angle: 0, mesh: null, speed: 0 };
+let player = { pos: new THREE.Vector3(), angle: 0, mesh: null, speed: 0, hp: 3, dead: false, damageCooldown: 0, carrying: null };
 let camYaw = Math.PI, camPitch = 0.18;
 let firstPerson = false;
 let fpPitch = 0;
@@ -264,6 +270,7 @@ let elevatorPos = new THREE.Vector3();
 let currentGrid = null;
 let elevatorDoorCollider = null;
 let npcs = [];
+let enemies = [], deadHeads = [];
 let keys = {}, locked = false;
 let lookTarget = null;
 let raf, clock = new THREE.Clock();
@@ -326,6 +333,9 @@ function loadMap(mapKey) {
   elevatorDoorCollider = null;
   walls = [];
   npcs = [];
+  enemies = [];
+  for (const dh of deadHeads) scene.remove(dh.grp);
+  deadHeads = [];
   lookTarget = null;
 
   const bgColor = 0x0d0d14;
@@ -335,6 +345,7 @@ function loadMap(mapKey) {
   buildMap();
   spawnPlayer();
   spawnNPCs();
+  spawnEnemies();
   updateHUD();
   updateCrewDots();
   floorLabel.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
@@ -705,11 +716,13 @@ function spawnPlayer() {
   const wx = sp.x*TILE+TILE/2, wz = sp.z*TILE+TILE/2;
   player.pos.set(wx, 0, wz);
   player.angle = 0;
+  player.hp = 3; player.dead = false; player.damageCooldown = 0; player.carrying = null;
 
   if (player.mesh) scene.remove(player.mesh);
   player.mesh = makeCrewmate(chosenColor, chosenHat);
   player.mesh.position.copy(player.pos);
   scene.add(player.mesh);
+  updateStaminaHUD();
 }
 
 // ─── Spawn NPCs ───────────────────────────────────────────────────────────────
@@ -736,7 +749,159 @@ function spawnNPCs() {
       wanderTarget: new THREE.Vector3(bx,0,bz),
       wanderTimer: 1 + Math.random()*2,
       elevatorTarget: false,
+      hp: 3, dead: false, damageCooldown: 0, carrying: null,
     });
+  }
+}
+
+// ─── Enemy mesh ───────────────────────────────────────────────────────────────
+function makeEnemy() {
+  const grp = new THREE.Group();
+  const bMat = new THREE.MeshLambertMaterial({ color: 0x1a0000 });
+  const eMat = new THREE.MeshBasicMaterial({ color: 0xff1100 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.4), bMat);
+  body.position.y = 0.38; grp.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.44, 0.48), bMat);
+  head.position.y = 0.86; grp.add(head);
+  [-0.13, 0.13].forEach(ex => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.075, 6, 5), eMat);
+    eye.position.set(ex, 0.9, 0.23); grp.add(eye);
+  });
+  [-0.14, 0.14].forEach(lx => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.28, 0.19), bMat);
+    leg.position.set(lx, 0.04, 0); grp.add(leg);
+  });
+  [-0.42, 0.42].forEach(ax => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.14), bMat);
+    arm.position.set(ax, 0.44, 0); grp.add(arm);
+  });
+  const glow = new THREE.PointLight(0xff1100, 0.8, 3.5);
+  glow.position.y = 0.9; grp.add(glow);
+  return grp;
+}
+
+// ─── Dead head mesh ───────────────────────────────────────────────────────────
+function makeDeadHead(color) {
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), mat);
+  const visorMat = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.85 });
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8, 0.2, 2.6, 0.4, 1.2), visorMat);
+  visor.position.set(0, 0.02, 0.18); grp.add(head, visor);
+  const glow = new THREE.PointLight(color, 0.4, 2.5); grp.add(glow);
+  return grp;
+}
+
+// ─── Spawn enemies ────────────────────────────────────────────────────────────
+function spawnEnemies() {
+  const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
+  const pool = getOpenCells().filter(cell =>
+    Math.hypot(cell.wx-spX, cell.wz-spZ) > TILE*4 &&
+    Math.hypot(cell.wx-elevatorPos.x, cell.wz-elevatorPos.z) > TILE*2
+  );
+  shuffle(pool);
+  for (let i=0; i<Math.min(ENEMY_COUNT, pool.length); i++) {
+    const mesh = makeEnemy();
+    mesh.position.set(pool[i].wx, 0, pool[i].wz);
+    scene.add(mesh);
+    enemies.push({ mesh, path:[], pathStep:0, pathTimer:Math.random(), damageCooldown:0 });
+  }
+}
+
+// ─── HP / damage ─────────────────────────────────────────────────────────────
+function updateStaminaHUD() {
+  spSegs.forEach((s,i) => s.classList.toggle('lost', i >= player.hp));
+}
+
+function damagePlayer() {
+  if (player.dead || player.damageCooldown > 0) return;
+  player.hp = Math.max(0, player.hp - 1);
+  player.damageCooldown = ENEMY_DMG_CD;
+  doFlash(0xff1100, 0.45);
+  updateStaminaHUD();
+  if (player.hp <= 0) killPlayer();
+}
+
+function killPlayer() {
+  player.dead = true;
+  player.mesh.visible = false;
+  const grp = makeDeadHead(chosenColor);
+  grp.position.set(player.pos.x, 0.34, player.pos.z);
+  scene.add(grp);
+  deadHeads.push({ grp, source:'player', entity:null, carriedBy:null });
+  showMessage('YOU DIED\nGet carried to the elevator', 3500);
+}
+
+function damageNPC(npc) {
+  if (npc.dead || npc.damageCooldown > 0) return;
+  npc.hp = Math.max(0, (npc.hp??3) - 1);
+  npc.damageCooldown = ENEMY_DMG_CD;
+  if (npc.hp <= 0) killNPC(npc);
+}
+
+function killNPC(npc) {
+  npc.dead = true;
+  npc.mesh.visible = false;
+  const grp = makeDeadHead(npc.color);
+  grp.position.set(npc.mesh.position.x, 0.34, npc.mesh.position.z);
+  scene.add(grp);
+  deadHeads.push({ grp, source:'npc', entity:npc, carriedBy:null });
+}
+
+function revive(dh) {
+  const idx = deadHeads.indexOf(dh);
+  if (idx !== -1) deadHeads.splice(idx, 1);
+  scene.remove(dh.grp);
+  if (dh.source === 'player') {
+    player.dead = false; player.hp = 3; player.mesh.visible = true;
+    player.pos.set(dh.grp.position.x, 0, dh.grp.position.z);
+    player.mesh.position.copy(player.pos);
+    updateStaminaHUD();
+    showMessage('REVIVED!', 1500);
+  } else if (dh.entity) {
+    const npc = dh.entity;
+    npc.dead = false; npc.hp = 3; npc.mesh.visible = true;
+    npc.mesh.position.set(dh.grp.position.x, 0, dh.grp.position.z);
+  }
+}
+
+// ─── Enemy AI ─────────────────────────────────────────────────────────────────
+function updateEnemies(dt) {
+  for (const en of enemies) {
+    en.damageCooldown = Math.max(0, en.damageCooldown - dt);
+
+    // find nearest living target
+    let tpos = null, tdist = Infinity;
+    if (!player.dead) {
+      const d = en.mesh.position.distanceTo(player.pos);
+      if (d < tdist) { tdist = d; tpos = player.pos; }
+    }
+    for (const npc of npcs) {
+      if (npc.dead) continue;
+      const d = en.mesh.position.distanceTo(npc.mesh.position);
+      if (d < tdist) { tdist = d; tpos = npc.mesh.position; }
+    }
+    if (!tpos) continue;
+
+    en.pathTimer -= dt;
+    if (en.pathTimer <= 0 || en.path.length === 0) {
+      npcComputePath(en, tpos.x, tpos.z);
+      en.pathTimer = 0.9 + Math.random()*0.4;
+    }
+    npcFollowPath(en, dt, Math.abs(Math.sin(clock.elapsedTime*9 + en.damageCooldown))*0.04, ENEMY_SPEED);
+
+    // deal damage on contact
+    if (en.damageCooldown <= 0) {
+      if (!player.dead && en.mesh.position.distanceTo(player.pos) < 0.75) {
+        damagePlayer(); en.damageCooldown = ENEMY_DMG_CD;
+      } else {
+        for (const npc of npcs) {
+          if (!npc.dead && en.mesh.position.distanceTo(npc.mesh.position) < 0.75) {
+            damageNPC(npc); en.damageCooldown = ENEMY_DMG_CD; break;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -751,25 +916,40 @@ function blocked(x, z, r) {
 
 // ─── Player update ────────────────────────────────────────────────────────────
 function updatePlayer(dt) {
+  player.damageCooldown = Math.max(0, player.damageCooldown - dt);
+
   const fwd = new THREE.Vector3( Math.sin(camYaw), 0,  Math.cos(camYaw));
   const rgt = new THREE.Vector3(-Math.cos(camYaw), 0,  Math.sin(camYaw));
   const move = new THREE.Vector3();
 
-  if (keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
-  if (keys['KeyS']||keys['ArrowDown'])  move.sub(fwd);
-  if (keys['KeyA']||keys['ArrowLeft'])  move.sub(rgt);
-  if (keys['KeyD']||keys['ArrowRight']) move.add(rgt);
+  if (!player.dead) {
+    if (keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
+    if (keys['KeyS']||keys['ArrowDown'])  move.sub(fwd);
+    if (keys['KeyA']||keys['ArrowLeft'])  move.sub(rgt);
+    if (keys['KeyD']||keys['ArrowRight']) move.add(rgt);
+  }
+
+  const sprinting = (keys['ShiftLeft']||keys['ShiftRight']) && !player.dead;
+  const spd = sprinting ? PLAYER_SPEED * SPRINT_MULT : PLAYER_SPEED;
 
   if (move.lengthSq() > 0) {
     move.normalize();
     player.angle = Math.atan2(move.x, move.z);
-    player.speed = PLAYER_SPEED;
-    const nx = player.pos.x + move.x * PLAYER_SPEED * dt;
-    const nz = player.pos.z + move.z * PLAYER_SPEED * dt;
+    player.speed = spd;
+    const nx = player.pos.x + move.x * spd * dt;
+    const nz = player.pos.z + move.z * spd * dt;
     if (!blocked(nx, player.pos.z, PR)) player.pos.x = nx;
     if (!blocked(player.pos.x, nz, PR)) player.pos.z = nz;
   } else {
     player.speed = 0;
+  }
+
+  // Update carried head position
+  if (player.carrying) {
+    player.carrying.grp.position.set(player.pos.x, 1.7, player.pos.z);
+    carryHint.style.display = 'block';
+  } else {
+    carryHint.style.display = 'none';
   }
 
   player.mesh.position.copy(player.pos);
@@ -869,7 +1049,16 @@ function updateNPCs(dt) {
 
   for (let i=0; i<npcs.length; i++) {
     const npc = npcs[i];
+    npc.damageCooldown = Math.max(0, (npc.damageCooldown||0) - dt);
+
+    if (npc.dead) continue;
+
     const bob = Math.abs(Math.sin(clock.elapsedTime*6 + i*1.3)) * 0.05;
+
+    // Update carried head
+    if (npc.carrying) {
+      npc.carrying.grp.position.set(npc.mesh.position.x, 1.7, npc.mesh.position.z);
+    }
 
     // ── Activating panel ──
     if (npc.activateTimer > 0) {
@@ -899,8 +1088,15 @@ function updateNPCs(dt) {
     }
     npc.elevatorTarget = false;
 
+    // ── Pick up nearby dead head when elevator is open ──
+    if (elevatorOpen && !npc.carrying) {
+      const nearHead = deadHeads.find(dh => !dh.carriedBy &&
+        Math.hypot(npc.mesh.position.x-dh.grp.position.x, npc.mesh.position.z-dh.grp.position.z) < 1.5);
+      if (nearHead) { nearHead.carriedBy = 'npc'; npc.carrying = nearHead; }
+    }
+
     // ── Seek panel ──
-    if (!npc.targetPanel || npc.targetPanel.userData.activated) {
+    if (!npc.carrying && (!npc.targetPanel || npc.targetPanel.userData.activated)) {
       npc.targetPanel = findNearestPanel(npc.mesh.position);
       if (npc.targetPanel) {
         const wp = npc.targetPanel.userData.worldPos;
@@ -930,7 +1126,7 @@ function updateNPCs(dt) {
   }
 }
 
-function npcFollowPath(npc, dt, bob) {
+function npcFollowPath(npc, dt, bob, speed = NPC_SPEED) {
   if (!npc.path || npc.path.length === 0) return;
   if (npc.pathStep >= npc.path.length) { npc.path = []; return; }
 
@@ -941,8 +1137,8 @@ function npcFollowPath(npc, dt, bob) {
 
   if (dist < 0.35) { npc.pathStep++; return; }
 
-  const nx = npc.mesh.position.x + (dx/dist)*NPC_SPEED*dt;
-  const nz = npc.mesh.position.z + (dz/dist)*NPC_SPEED*dt;
+  const nx = npc.mesh.position.x + (dx/dist)*speed*dt;
+  const nz = npc.mesh.position.z + (dz/dist)*speed*dt;
   if (!blocked(nx, npc.mesh.position.z, 0.28)) npc.mesh.position.x = nx;
   if (!blocked(npc.mesh.position.x, nz, 0.28)) npc.mesh.position.z = nz;
   npc.mesh.rotation.y = Math.atan2(dx, dz);
@@ -994,6 +1190,17 @@ function checkLookTarget() {
       }
     }
   }
+  // Check dead heads
+  for (const dh of deadHeads) {
+    if (dh.carriedBy) continue;
+    if (player.pos.distanceTo(dh.grp.position) < INTERACT_DIST) {
+      lookTarget = { type:'head', head:dh };
+      interactHint.textContent = '[E] Pick up';
+      interactHint.style.display = 'block';
+      return;
+    }
+  }
+
   if (elevatorOpen && isInElevator(player.pos)) {
     interactHint.textContent = 'Waiting for crew...';
     interactHint.style.display = 'block';
@@ -1006,7 +1213,12 @@ function checkLookTarget() {
 // ─── Interact ─────────────────────────────────────────────────────────────────
 function interact() {
   if (!lookTarget) return;
-  if (lookTarget.type === 'panel') activatePanel(lookTarget.obj);
+  if (lookTarget.type === 'panel') {
+    activatePanel(lookTarget.obj);
+  } else if (lookTarget.type === 'head' && !player.carrying) {
+    player.carrying = lookTarget.head;
+    lookTarget.head.carriedBy = 'player';
+  }
 }
 
 function activatePanel(panel) {
@@ -1056,9 +1268,22 @@ function nextFloor() {
 
 function checkElevatorFill() {
   if (!elevatorOpen || !elevatorFilling) return;
-  if (!isInElevator(player.pos)) return;
-  const allNpcsIn = npcs.every(n => isInElevator(n.mesh.position));
-  if (allNpcsIn) nextFloor();
+
+  // Revive any carried heads inside elevator
+  if (player.carrying && isInElevator(player.pos)) {
+    revive(player.carrying); player.carrying = null;
+  }
+  for (const npc of npcs) {
+    if (npc.carrying && isInElevator(npc.mesh.position)) {
+      revive(npc.carrying); npc.carrying = null;
+    }
+  }
+
+  // Dead entities don't block advancement
+  const playerReady = player.dead || isInElevator(player.pos);
+  if (!playerReady) return;
+  const allNpcsReady = npcs.every(n => n.dead || isInElevator(n.mesh.position));
+  if (allNpcsReady) nextFloor();
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
@@ -1113,6 +1338,7 @@ function loop() {
       checkLookTarget();
     }
     updateNPCs(dt);
+    updateEnemies(dt);
     checkElevatorFill();
     renderer.render(scene, camera);
   } catch(e) {

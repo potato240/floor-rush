@@ -128,6 +128,29 @@
       font-size:11px; color:#555; line-height:1.8;
       text-align:right;
     }
+
+    /* Stamina bar */
+    #stamina-bar {
+      position:absolute; bottom:28px; left:18px;
+      display:flex; flex-direction:column; gap:4px;
+    }
+    #stamina-label { font-size:10px; letter-spacing:2px; color:#888; }
+    #stamina-segs { display:flex; gap:3px; }
+    .sp-seg {
+      width:30px; height:10px;
+      background:#00ffcc;
+      border:2px solid rgba(255,255,255,0.3);
+      border-radius:3px;
+      transition:background .3s;
+    }
+    .sp-seg.lost { background:#991111; }
+
+    /* Carrying indicator */
+    #carry-hint {
+      position:absolute; top:60%; left:50%; transform:translateX(-50%);
+      font-size:14px; color:#ffcc00; background:rgba(0,0,0,0.55);
+      padding:4px 14px; border-radius:20px; display:none;
+    }
   </style>
 </head>
 <body>
@@ -146,7 +169,16 @@
     <div id="interact-hint">[E] Activate Panel</div>
   </div>
   <div id="message"></div>
-  <div id="controls-hint">WASD — Move<br>Mouse — Look<br>E — Interact<br>V — Toggle POV<br>Click — Lock cursor</div>
+  <div id="carry-hint">Carrying a head — get to the elevator!</div>
+  <div id="stamina-bar">
+    <div id="stamina-label">HP</div>
+    <div id="stamina-segs">
+      <div class="sp-seg" id="sp-0"></div>
+      <div class="sp-seg" id="sp-1"></div>
+      <div class="sp-seg" id="sp-2"></div>
+    </div>
+  </div>
+  <div id="controls-hint">WASD — Move<br>Shift — Sprint<br>Mouse — Look<br>E — Interact<br>V — Toggle POV<br>Click — Lock cursor</div>
 </div>
 <div id="flash"></div>
 
