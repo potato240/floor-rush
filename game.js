@@ -261,6 +261,7 @@ let walls = [];
 let panels = [], panelsActivated = 0;
 let elevatorDoor = null, elevatorOpen = false, elevatorFilling = false;
 let elevatorPos = new THREE.Vector3();
+let currentGrid = null;
 let elevatorDoorCollider = null;
 let npcs = [];
 let keys = {}, locked = false;
@@ -316,6 +317,7 @@ function loadMap(mapKey) {
 
   mapDef = MAPS[mapKey];
   _openCells = null;
+  currentGrid = null;
   panels = [];
   panelsActivated = 0;
   elevatorOpen = false;
@@ -341,9 +343,32 @@ function loadMap(mapKey) {
   loop();
 }
 
+// ─── Pick a random wall cell with one open neighbour for the elevator ─────────
+function pickElevatorCell(g, rows, cols) {
+  const DIRS4 = [[-1,0],[1,0],[0,-1],[0,1]];
+  const byCount = [[], [], [], [], []];
+  for (let r = 1; r < rows-1; r++) {
+    for (let c = 1; c < cols-1; c++) {
+      if (g[r][c] !== 1) continue;
+      const openD = DIRS4.filter(([dr,dc]) => g[r+dr]?.[c+dc] === 0);
+      if (openD.length > 0 && openD.length <= 4) {
+        const [dr, dc] = openD[0];
+        byCount[openD.length].push({ r, c, dr, dc, nx: dc, nz: dr });
+      }
+    }
+  }
+  for (let n = 1; n <= 4; n++) {
+    if (byCount[n].length) return byCount[n][Math.floor(Math.random()*byCount[n].length)];
+  }
+  // fallback: use first entry from mapDef if defined
+  const ev = mapDef.elevator;
+  return { r: ev.z, c: ev.x, dr: 0, dc: -1, nx: -1, nz: 0 };
+}
+
 // ─── Map builder ──────────────────────────────────────────────────────────────
 function buildMap() {
-  const g    = mapDef.grid;
+  // Work on a grid copy so we can mark the elevator cell as walkable
+  const g    = mapDef.grid.map(row => [...row]);
   const rows = g.length, cols = g[0].length;
   const c    = mapDef.colors;
 
@@ -400,61 +425,41 @@ function buildMap() {
     }
   }
 
-  // ── Elevator: door-in-wall ───────────────────────────────────────────────────
-  const ev = mapDef.elevator;
-  const evR = ev.z, evC = ev.x;
+  // ── Elevator: door inset into a random wall ──────────────────────────────────
+  const elev = pickElevatorCell(g, rows, cols);
+  const evR = elev.r, evC = elev.c;
+  const doorDir = elev; // .dr .dc .nx .nz
+
+  // Mark elevator cell as walkable so BFS can route through it
+  g[evR][evC] = 0;
+  currentGrid = g;
+
   const ex = evC*TILE+TILE/2, ez = evR*TILE+TILE/2;
   elevatorPos.set(ex, 0, ez);
 
-  // Remove any existing wall box covering this cell
+  // Replace wall mesh for this cell with elevator floor + ceiling
   walls = walls.filter(w => !(w.minX < ex+0.1 && w.maxX > ex-0.1 && w.minZ < ez+0.1 && w.maxZ > ez-0.1));
+  // Remove the wall mesh from scene (it was already added in main loop as a wall)
+  scene.children.filter(o => o.isMesh && Math.abs(o.position.x-ex)<0.1 && Math.abs(o.position.z-ez)<0.1 && Math.abs(o.position.y-WALL_H/2)<0.1)
+    .forEach(o => scene.remove(o));
 
-  // Find door direction: face of elevator cell that points toward spawn (and is accessible)
-  const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
-  const doorCands = [
-    {dr:-1,dc:0,nx:0,nz:-1},{dr:1,dc:0,nx:0,nz:1},
-    {dr:0,dc:-1,nx:-1,nz:0},{dr:0,dc:1,nx:1,nz:0},
-  ];
-  let doorDir = doorCands[0];
-  let bestScore = -Infinity;
+  const evFloor = new THREE.Mesh(new THREE.PlaneGeometry(TILE,TILE), new THREE.MeshLambertMaterial({color:c.trim}));
+  evFloor.rotation.x = -Math.PI/2; evFloor.position.set(ex,0,ez); scene.add(evFloor);
+  const evCeil  = new THREE.Mesh(new THREE.PlaneGeometry(TILE,TILE), new THREE.MeshLambertMaterial({color:c.ceiling}));
+  evCeil.rotation.x = Math.PI/2;   evCeil.position.set(ex,WALL_H,ez); scene.add(evCeil);
+
+  // Thin walls on the 3 sides that face other wall cells (avoids z-fighting; only build if adj is open)
+  const doorCands = [{dr:-1,dc:0,nx:0,nz:-1},{dr:1,dc:0,nx:0,nz:1},{dr:0,dc:-1,nx:-1,nz:0},{dr:0,dc:1,nx:1,nz:0}];
+  const evWallMat = new THREE.MeshLambertMaterial({color:c.trim});
   for (const d of doorCands) {
-    const score = d.nx*(spX-ex) + d.nz*(spZ-ez);
-    if (score > bestScore && g[evR+d.dr]?.[evC+d.dc] === 0) {
-      bestScore = score; doorDir = d;
-    }
-  }
-
-  // Floor + ceiling for elevator cell (removed from wall above, now needs floor/ceil)
-  const evFloor = new THREE.Mesh(new THREE.PlaneGeometry(TILE,TILE),
-    new THREE.MeshLambertMaterial({ color: c.trim }));
-  evFloor.rotation.x = -Math.PI/2;
-  evFloor.position.set(ex, 0, ez);
-  scene.add(evFloor);
-  const evCeil = new THREE.Mesh(new THREE.PlaneGeometry(TILE,TILE),
-    new THREE.MeshLambertMaterial({ color: c.ceiling }));
-  evCeil.rotation.x = Math.PI/2;
-  evCeil.position.set(ex, WALL_H, ez);
-  scene.add(evCeil);
-
-  // 3 solid walls (sides that are NOT the door)
-  const evWallMat = new THREE.MeshLambertMaterial({ color: c.trim });
-  for (const d of doorCands) {
-    if (d.nx === doorDir.nx && d.nz === doorDir.nz) continue; // skip door side
-    // Only build wall panel if adjacent cell isn't already a wall (avoids Z-fighting)
+    if (d.nx === doorDir.nx && d.nz === doorDir.nz) continue;
     if (g[evR+d.dr]?.[evC+d.dc] === 0) {
       const isX = d.nx !== 0;
-      const wp = new THREE.Mesh(
-        new THREE.BoxGeometry(isX ? 0.15 : TILE, WALL_H, isX ? TILE : 0.15),
-        evWallMat
-      );
-      wp.position.set(ex + d.nx*(TILE/2-0.075), WALL_H/2, ez + d.nz*(TILE/2-0.075));
+      const wp = new THREE.Mesh(new THREE.BoxGeometry(isX?0.15:TILE, WALL_H, isX?TILE:0.15), evWallMat);
+      wp.position.set(ex+d.nx*(TILE/2-0.075), WALL_H/2, ez+d.nz*(TILE/2-0.075));
       scene.add(wp);
-      walls.push({
-        minX: wp.position.x - (isX ? 0.15 : TILE)/2,
-        maxX: wp.position.x + (isX ? 0.15 : TILE)/2,
-        minZ: wp.position.z - (isX ? TILE : 0.15)/2,
-        maxZ: wp.position.z + (isX ? TILE : 0.15)/2,
-      });
+      walls.push({ minX:wp.position.x-(isX?0.15:TILE)/2, maxX:wp.position.x+(isX?0.15:TILE)/2,
+                   minZ:wp.position.z-(isX?TILE:0.15)/2,  maxZ:wp.position.z+(isX?TILE:0.15)/2 });
     }
   }
 
@@ -848,7 +853,7 @@ function worldToCell(x, z) {
 function npcComputePath(npc, destX, destZ) {
   const from = worldToCell(npc.mesh.position.x, npc.mesh.position.z);
   const to   = worldToCell(destX, destZ);
-  const path = aStar(mapDef.grid, from.r, from.c, to.r, to.c);
+  const path = aStar(currentGrid, from.r, from.c, to.r, to.c);
   npc.path = path || [];
   npc.pathStep = 0;
 }
@@ -956,7 +961,7 @@ function isInElevator(pos) {
 
 function getOpenCells() {
   if (_openCells) return _openCells;
-  const g = mapDef.grid, out = [];
+  const g = currentGrid || mapDef.grid, out = [];
   for (let r=0; r<g.length; r++)
     for (let c=0; c<g[0].length; c++)
       if (g[r][c] === 0) out.push({ wx: c*TILE+TILE/2, wz: r*TILE+TILE/2 });
