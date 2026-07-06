@@ -504,7 +504,9 @@ function buildMap() {
   scene.add(evLight);
 
   // ── Panels ──────────────────────────────────────────────────────────────────
-  const sides = findWallSides(g, rows, cols);
+  const sides = findWallSides(g, rows, cols).filter(
+    s => Math.hypot(s.wx - elevatorPos.x, s.wz - elevatorPos.z) > TILE
+  );
   shuffle(sides);
   sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
 }
