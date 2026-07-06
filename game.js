@@ -860,7 +860,10 @@ function npcComputePath(npc, destX, destZ) {
 
 // ─── NPC update ───────────────────────────────────────────────────────────────
 function updateNPCs(dt) {
-  const cells = getOpenCells();
+  const allCells = getOpenCells();
+  const cells = elevatorOpen ? allCells : allCells.filter(
+    cell => Math.hypot(cell.wx - elevatorPos.x, cell.wz - elevatorPos.z) > TILE
+  );
 
   for (let i=0; i<npcs.length; i++) {
     const npc = npcs[i];
