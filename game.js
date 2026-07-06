@@ -215,6 +215,7 @@ const messageEl     = document.getElementById('message');
 const flashEl       = document.getElementById('flash');
 const carryHint     = document.getElementById('carry-hint');
 const spSegs        = [0,1,2].map(i => document.getElementById(`sp-${i}`));
+const sprintFill    = document.getElementById('sprint-fill');
 
 // ─── Player choices ───────────────────────────────────────────────────────────
 let chosenColor = AU_COLORS[0].hex;
@@ -722,7 +723,7 @@ function spawnPlayer() {
   const wx = sp.x*TILE+TILE/2, wz = sp.z*TILE+TILE/2;
   player.pos.set(wx, 0, wz);
   player.angle = 0;
-  player.hp = 3; player.dead = false; player.damageCooldown = 0; player.carrying = null;
+  player.hp = 3; player.stamina = 100; player.dead = false; player.damageCooldown = 0; player.carrying = null;
 
   if (player.mesh) scene.remove(player.mesh);
   player.mesh = makeCrewmate(chosenColor, chosenHat);
@@ -968,7 +969,15 @@ function updatePlayer(dt) {
     if (keys['KeyD']||keys['ArrowRight']) move.add(rgt);
   }
 
-  const sprinting = (keys['ShiftLeft']||keys['ShiftRight']) && !player.dead;
+  const wantSprint = (keys['ShiftLeft']||keys['ShiftRight']) && !player.dead;
+  const sprinting = wantSprint && player.stamina > 0;
+  if (sprinting) {
+    player.stamina = Math.max(0, player.stamina - 40 * dt);
+  } else {
+    player.stamina = Math.min(100, player.stamina + 20 * dt);
+  }
+  sprintFill.style.width = player.stamina + '%';
+  sprintFill.classList.toggle('empty', player.stamina <= 0);
   const spd = sprinting ? PLAYER_SPEED * SPRINT_MULT : PLAYER_SPEED;
 
   if (move.lengthSq() > 0) {
