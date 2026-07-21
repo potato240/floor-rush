@@ -2070,11 +2070,9 @@ function startInfectCutscene() {
 function updateCutscene(dt) {
   csTime += dt;
   const t = Math.min(csTime / CS_DUR, 1);
-  const mesh = csScene && csScene.userData.char;
-  if (!mesh) return;
-
   const csType = csScene && csScene.userData.csType;
 
+  // attack cutscene has no .char — handle it before the char guard
   if (csType === 'attack') {
     const { attackerMesh, playerMesh, tongueMesh } = csScene.userData;
     // Phase 1 (0–0.25): both characters idle, attacker leans forward
@@ -2113,6 +2111,9 @@ function updateCutscene(dt) {
     if (csTime >= CS_DUR) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
     return;
   }
+
+  const mesh = csScene && csScene.userData.char;
+  if (!mesh) return;
 
   const isDeath = csType === 'death';
 
@@ -2274,12 +2275,12 @@ function showInfectCutscene() {
 function startInfectAttackCutscene(attackerColor, attackerHat) {
   csScene = new THREE.Scene();
   csScene.background = new THREE.Color(0x010802);
-  csScene.add(new THREE.AmbientLight(0x113311, 2.0));
-  const key = new THREE.PointLight(0x44ff66, 2.5, 14);
+  csScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const key = new THREE.PointLight(0xffffff, 2.0, 14);
   key.position.set(0, 4, 2);
   csScene.add(key);
-  csGreenLight = new THREE.PointLight(0x33ff66, 1.0, 8);
-  csGreenLight.position.set(-1, 1.5, 1);
+  csGreenLight = new THREE.PointLight(0x33ff66, 1.2, 8);
+  csGreenLight.position.set(-1.3, 1.5, 1);
   csScene.add(csGreenLight);
 
   // Attacker (infected NPC) on the left, rotated to face right (+X) toward player
@@ -2297,8 +2298,8 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
 
   // Tongue — BoxGeometry(1,…), scale.x + position.x updated per frame to extend rightward
   // With rotation.y=PI/2, attacker face (local z=0.31) → world x = -1.3+0.31 = -0.99
-  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xcc1144 });
-  const tongueMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.12, 0.12), tongueMat);
+  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xcc1144, emissive: 0x661122 });
+  const tongueMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.18, 0.18), tongueMat);
   tongueMesh.position.set(-0.99, 0.63, 0);
   tongueMesh.scale.x = 0.001;
   csScene.add(tongueMesh);
