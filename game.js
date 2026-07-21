@@ -57,6 +57,12 @@ const AU_COLORS = [
   { name:'Army',    hex:0x6b8c00 },
 ];
 
+// ─── Mouth definitions ────────────────────────────────────────────────────────
+const MOUTHS = [
+  { id:'none',   label:'None',   icon:'🚫' },
+  { id:'zigzag', label:'Zigzag', icon:'〰️' },
+];
+
 // ─── Hat definitions ──────────────────────────────────────────────────────────
 const HATS = [
   { id:'none',     label:'None',      icon:'🚫' },
@@ -329,8 +335,9 @@ const pvpWeaponEl   = document.getElementById('pvp-weapon');
 const pvpTeamsEl    = document.getElementById('pvp-teams');
 
 // ─── Player choices ───────────────────────────────────────────────────────────
-let chosenColor = AU_COLORS[0].hex;
-let chosenHat   = 'none';
+let chosenColor  = AU_COLORS[0].hex;
+let chosenHat    = 'none';
+let chosenMouth  = 'none';
 
 // ─── Build character creator UI ───────────────────────────────────────────────
 AU_COLORS.forEach(c => {
@@ -356,6 +363,19 @@ HATS.forEach(h => {
     chosenHat = h.id;
   });
   hatGrid.appendChild(btn);
+});
+
+const mouthGrid = document.getElementById('mouth-grid');
+MOUTHS.forEach(m => {
+  const btn = document.createElement('div');
+  btn.className = 'hat-btn' + (m.id === chosenMouth ? ' active' : '');
+  btn.innerHTML = `<span class="hat-icon">${m.icon}</span><span>${m.label}</span>`;
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#mouth-grid .hat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    chosenMouth = m.id;
+  });
+  mouthGrid.appendChild(btn);
 });
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
@@ -819,7 +839,26 @@ function addPanel(ws, accentColor) {
 }
 
 // ─── Crewmate mesh ────────────────────────────────────────────────────────────
-function makeCrewmate(color, hatId) {
+function makeMouth(id) {
+  if (id === 'none') return null;
+  const grp = new THREE.Group();
+  if (id === 'zigzag') {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+    const n = 10, spanX = 0.026, spanY = 0.022;
+    const segLen = Math.sqrt(spanX * spanX + spanY * spanY);
+    const angle  = Math.atan2(spanY, spanX);
+    const startX = -(n * spanX) / 2;
+    for (let i = 0; i < n; i++) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.018, 0.018), mat);
+      seg.position.set(startX + (i + 0.5) * spanX, 0.645 + (i % 2 === 0 ? spanY * 0.5 : -spanY * 0.5), 0.315);
+      seg.rotation.z = i % 2 === 0 ? -angle : angle;
+      grp.add(seg);
+    }
+  }
+  return grp;
+}
+
+function makeCrewmate(color, hatId, mouthId = chosenMouth) {
   const g = new THREE.Group();
   const mat  = new THREE.MeshLambertMaterial({ color });
   const dark = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.5) });
@@ -854,10 +893,11 @@ function makeCrewmate(color, hatId) {
 
   // Hat
   const hat = makeHat(hatId, color);
-  if (hat) {
-    hat.position.set(0, 1.1, 0);
-    g.add(hat);
-  }
+  if (hat) { hat.position.set(0, 1.1, 0); g.add(hat); }
+
+  // Mouth cosmetic
+  const mouth = makeMouth(mouthId);
+  if (mouth) g.add(mouth);
 
   g.traverse(m => { if (m.isMesh && m !== visor) m.castShadow = false; });
   return g;
