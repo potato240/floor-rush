@@ -360,7 +360,7 @@ let pvpOver = false;
 
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
-const INFECT_NPC_SPEED  = NPC_SPEED * 1.5;
+const INFECT_NPC_SPEED  = NPC_SPEED * 0.5;
 let infectionMode   = false;
 let playerInfected  = false;
 let activeMinigame  = null;
