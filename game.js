@@ -358,11 +358,23 @@ let pvpBlue = [], pvpRed = [];
 let wPickups = [], bullets = [];
 let pvpOver = false;
 
+// ─── Infection state ──────────────────────────────────────────────────────────
+const INFECT_RANGE      = 1.1;
+const INFECT_NPC_SPEED  = 3.8;
+let infectionMode   = false;
+let playerInfected  = false;
+let activeMinigame  = null;
+let infectionOver   = false;
+
 // ─── Input ────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'KeyE') interact();
+  if (e.code === 'KeyE') { if (activeMinigame) handleMinigameKey('KeyE'); else interact(); }
   if (e.code === 'KeyV') togglePOV();
+  if (e.code === 'Escape' && activeMinigame) cancelMinigame();
+  if (activeMinigame && activeMinigame.type === 'sequence' &&
+      ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
+    handleMinigameKey(e.code);
 });
 document.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -386,7 +398,9 @@ canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpM
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 playBtn.addEventListener('click', () => {
-  pvpMode = document.getElementById('pvp-check').checked;
+  const mode = document.querySelector('input[name="gamemode"]:checked')?.value || 'normal';
+  pvpMode        = mode === 'pvp';
+  infectionMode  = mode === 'infection';
   overlay.style.display = 'none';
   startGame(mapPicker.value);
   canvas.requestPointerLock();
@@ -428,10 +442,16 @@ function loadMap(mapKey) {
   scene.fog = new THREE.Fog(bgColor, 16, 50);
 
   pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
+  playerInfected = false; activeMinigame = null; infectionOver = false;
   buildMap();
   spawnPlayer();
   if (pvpMode) {
     initPVP();
+  } else if (infectionMode) {
+    spawnNPCs();
+    initInfection();
+    updateHUD();
+    updateCrewDots();
   } else {
     spawnNPCs();
     spawnEnemies();
@@ -439,8 +459,10 @@ function loadMap(mapKey) {
     updateHUD();
     updateCrewDots();
   }
-  document.getElementById('panel-bar').style.display = pvpMode ? 'none' : '';
-  document.getElementById('pvp-hud').style.display   = pvpMode ? 'flex' : 'none';
+  document.getElementById('panel-bar').style.display   = pvpMode  ? 'none' : '';
+  document.getElementById('pvp-hud').style.display     = pvpMode  ? 'flex' : 'none';
+  document.getElementById('infect-hud').style.display  = infectionMode ? 'flex' : 'none';
+  document.getElementById('minigame-ui').style.display = 'none';
   floorLabel.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
 
   clock.start();
@@ -1397,6 +1419,7 @@ function updateNPCs(dt) {
 
   for (let i=0; i<npcs.length; i++) {
     const npc = npcs[i];
+    if (infectionMode && npc.infected) continue; // handled by updateInfection
     npc.damageCooldown = Math.max(0, (npc.damageCooldown||0) - dt);
 
     if (npc.dead) continue;
@@ -1557,7 +1580,7 @@ function checkLookTarget() {
       const playerDist = player.pos.distanceTo(p.userData.worldPos);
       if (playerDist < INTERACT_DIST) {
         lookTarget = { type:'panel', obj:p };
-        interactHint.textContent = '[E] Activate Panel';
+        interactHint.textContent = infectionMode ? '[E] Hack Panel' : '[E] Activate Panel';
         interactHint.style.display = 'block';
         return;
       }
@@ -1587,7 +1610,8 @@ function checkLookTarget() {
 function interact() {
   if (!lookTarget) return;
   if (lookTarget.type === 'panel') {
-    activatePanel(lookTarget.obj);
+    if (infectionMode) { if (!playerInfected) startMinigame(lookTarget.obj); }
+    else activatePanel(lookTarget.obj);
   } else if (lookTarget.type === 'head' && !player.carrying) {
     player.carrying = lookTarget.head;
     lookTarget.head.carriedBy = 'player';
@@ -1712,6 +1736,10 @@ function loop() {
     }
     if (pvpMode) {
       updatePVP(dt);
+    } else if (infectionMode) {
+      updateNPCs(dt);
+      updateInfection(dt);
+      checkElevatorFill();
     } else {
       updateNPCs(dt);
       updateEnemies(dt);
@@ -1722,6 +1750,220 @@ function loop() {
   } catch(e) {
     console.error('Loop error:', e);
   }
+}
+
+// ─── Infection mode ───────────────────────────────────────────────────────────
+const MG_TYPES = ['mash','timing','sequence'];
+
+function tintInfected(mesh) {
+  mesh.traverse(child => {
+    if (child.isMesh && child.material) {
+      const m = child.material.clone();
+      m.color.setHex(0x33bb44); if (m.emissive) m.emissive.setHex(0x114422);
+      child.material = m;
+    }
+  });
+}
+
+function infectEntity(entity) {
+  if (entity === 'player') {
+    if (playerInfected) return;
+    playerInfected = true;
+    tintInfected(player.mesh);
+    if (activeMinigame) cancelMinigame();
+    showMessage('YOU ARE INFECTED!', 3000);
+    doFlash(0x00ff44, 0.7);
+  } else {
+    if (entity.infected) return;
+    entity.infected = true;
+    tintInfected(entity.mesh);
+  }
+  updateInfectionHUD();
+  checkInfectionEnd();
+}
+
+function initInfection() {
+  const types = MG_TYPES;
+  panels.forEach((p, i) => { p.userData.minigameType = types[i % types.length]; });
+  if (npcs.length > 0) infectEntity(npcs[Math.floor(Math.random() * npcs.length)]);
+  updateInfectionHUD();
+}
+
+function updateInfectionHUD() {
+  const el = document.getElementById('infect-count');
+  if (!el) return;
+  const total = npcs.length + 1;
+  const inf = npcs.filter(n => n.infected).length + (playerInfected ? 1 : 0);
+  el.innerHTML = `<span style="color:#33bb44">⬤</span> INFECTED ${inf} / ${total}`;
+}
+
+function checkInfectionEnd() {
+  if (infectionOver) return;
+  const allInfected = playerInfected && npcs.every(n => n.infected || n.dead);
+  if (allInfected) { infectionOver = true; showMessage('ALL INFECTED — YOU LOSE!', 5000); }
+}
+
+function updateInfection(dt) {
+  if (infectionOver) return;
+  updateMinigame(dt);
+
+  for (const npc of npcs) {
+    if (!npc.infected || npc.dead) continue;
+    npc.damageCooldown = Math.max(0, (npc.damageCooldown || 0) - dt);
+
+    // Find nearest non-infected target
+    let nearDist = Infinity, nearPos = null, nearEntity = null;
+    if (!playerInfected) {
+      const d = npc.mesh.position.distanceTo(player.pos);
+      if (d < nearDist) { nearDist = d; nearPos = player.pos; nearEntity = 'player'; }
+    }
+    for (const other of npcs) {
+      if (other.infected || other.dead) continue;
+      const d = npc.mesh.position.distanceTo(other.mesh.position);
+      if (d < nearDist) { nearDist = d; nearPos = other.mesh.position; nearEntity = other; }
+    }
+
+    if (nearPos) {
+      npc.pathTimer = (npc.pathTimer || 0) - dt;
+      if (npc.pathTimer <= 0 || npc.path.length === 0) {
+        npcComputePath(npc, nearPos.x, nearPos.z);
+        npc.pathTimer = 0.5 + Math.random() * 0.3;
+      }
+      npcFollowPath(npc, dt, 0, INFECT_NPC_SPEED);
+      if (nearDist < INFECT_RANGE && npc.damageCooldown <= 0) {
+        infectEntity(nearEntity);
+        npc.damageCooldown = 1.5;
+      }
+    }
+  }
+
+  // Player infected → can spread by walking into others
+  if (playerInfected) {
+    for (const npc of npcs) {
+      if (!npc.infected && !npc.dead && player.pos.distanceTo(npc.mesh.position) < INFECT_RANGE)
+        infectEntity(npc);
+    }
+  }
+}
+
+// ─── Minigame system ──────────────────────────────────────────────────────────
+function startMinigame(panel) {
+  if (activeMinigame || panel.userData.activated) return;
+  const type = panel.userData.minigameType || 'mash';
+  let state;
+  if (type === 'mash') {
+    state = { count:0, required:10, timer:6.0 };
+  } else if (type === 'timing') {
+    const zs = 0.2 + Math.random() * 0.35;
+    state = { cursor:0, dir:1, speed:1.1 + Math.random()*0.8, zoneStart:zs, zoneEnd:zs+0.22, misses:0 };
+  } else {
+    const DIRS = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
+    const len = 3 + Math.floor(Math.random() * 3);
+    state = { seq: Array.from({length:len}, ()=>DIRS[Math.floor(Math.random()*4)]), index:0 };
+  }
+  activeMinigame = { panel, type, state };
+  renderMinigameUI();
+  document.getElementById('minigame-ui').style.display = 'flex';
+}
+
+function renderMinigameUI() {
+  const mg = activeMinigame;
+  const arrows = {ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→'};
+  const el = document.getElementById('mg-content');
+  if (mg.type === 'mash') {
+    el.innerHTML = `<div class="mg-label">MASH [E]!</div>
+      <div class="mg-bar-wrap"><div class="mg-bar-fill" id="mg-fill" style="width:0%"></div></div>
+      <div id="mg-count">0 / ${mg.state.required}</div>
+      <div id="mg-timer">${mg.state.timer.toFixed(1)}s</div>`;
+  } else if (mg.type === 'timing') {
+    const zl = mg.state.zoneStart*100, zw = (mg.state.zoneEnd-mg.state.zoneStart)*100;
+    el.innerHTML = `<div class="mg-label">PRESS [E] IN THE ZONE!</div>
+      <div class="mg-timing-wrap">
+        <div class="mg-timing-zone" id="mg-zone" style="left:${zl}%;width:${zw}%"></div>
+        <div class="mg-timing-cursor" id="mg-cursor" style="left:0%"></div>
+      </div>
+      <div id="mg-misses">3 attempts left</div>`;
+  } else {
+    const keys = mg.state.seq.map((k,i)=>
+      `<span class="mg-seq-key ${i===0?'mg-seq-active':''}">${arrows[k]}</span>`).join('');
+    el.innerHTML = `<div class="mg-label">PRESS THE SEQUENCE!</div>
+      <div id="mg-seq-row">${keys}</div>
+      <div class="mg-hint">Use arrow keys</div>`;
+  }
+}
+
+function updateMinigame(dt) {
+  if (!activeMinigame) return;
+  const mg = activeMinigame;
+  if (player.pos.distanceTo(mg.panel.userData.worldPos) > INTERACT_DIST * 1.6) {
+    cancelMinigame(); return;
+  }
+  if (mg.type === 'mash') {
+    mg.state.timer -= dt;
+    const t = document.getElementById('mg-timer');
+    if (t) t.textContent = Math.max(0, mg.state.timer).toFixed(1) + 's';
+    if (mg.state.timer <= 0) { cancelMinigame(); showMessage('TOO SLOW!', 1200); }
+  } else if (mg.type === 'timing') {
+    mg.state.cursor = Math.max(0, Math.min(1, mg.state.cursor + mg.state.dir * mg.state.speed * dt));
+    if (mg.state.cursor >= 1) mg.state.dir = -1;
+    if (mg.state.cursor <= 0) mg.state.dir = 1;
+    const c = document.getElementById('mg-cursor');
+    if (c) c.style.left = (mg.state.cursor * 100) + '%';
+  }
+}
+
+function handleMinigameKey(code) {
+  if (!activeMinigame) return;
+  const mg = activeMinigame;
+  if (mg.type === 'mash' && code === 'KeyE') {
+    mg.state.count++;
+    const pct = Math.min(100, mg.state.count / mg.state.required * 100);
+    const f = document.getElementById('mg-fill'); if (f) f.style.width = pct + '%';
+    const c = document.getElementById('mg-count'); if (c) c.textContent = `${mg.state.count} / ${mg.state.required}`;
+    if (mg.state.count >= mg.state.required) completeMinigame();
+  } else if (mg.type === 'timing' && code === 'KeyE') {
+    const { cursor, zoneStart, zoneEnd } = mg.state;
+    if (cursor >= zoneStart && cursor <= zoneEnd) {
+      completeMinigame();
+    } else {
+      mg.state.misses++;
+      doFlash(0xff2200, 0.2);
+      if (mg.state.misses >= 3) { cancelMinigame(); showMessage('MISSED!', 1200); }
+      else {
+        const m = document.getElementById('mg-misses');
+        if (m) m.textContent = (3 - mg.state.misses) + ' attempts left';
+      }
+    }
+  } else if (mg.type === 'sequence') {
+    const expected = mg.state.seq[mg.state.index];
+    if (code === expected) {
+      mg.state.index++;
+      document.querySelectorAll('.mg-seq-key').forEach((el,i) => {
+        el.classList.toggle('mg-seq-active', i === mg.state.index);
+        el.classList.toggle('mg-seq-done', i < mg.state.index);
+      });
+      if (mg.state.index >= mg.state.seq.length) completeMinigame();
+    } else {
+      mg.state.index = 0;
+      document.querySelectorAll('.mg-seq-key').forEach((el,i) => {
+        el.classList.toggle('mg-seq-active', i === 0);
+        el.classList.remove('mg-seq-done');
+      });
+      doFlash(0xff2200, 0.2);
+    }
+  }
+}
+
+function completeMinigame() {
+  const panel = activeMinigame.panel;
+  document.getElementById('minigame-ui').style.display = 'none';
+  activeMinigame = null;
+  activatePanel(panel);
+}
+
+function cancelMinigame() {
+  document.getElementById('minigame-ui').style.display = 'none';
+  activeMinigame = null;
 }
 
 // ─── PVP ──────────────────────────────────────────────────────────────────────

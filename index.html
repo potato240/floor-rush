@@ -155,13 +155,43 @@
     #pvp-teams { font-size:17px; font-weight:bold; letter-spacing:1px; }
     #pvp-weapon { font-size:13px; color:#ffcc00; letter-spacing:1px; }
 
-    /* Mode toggle */
-    #pvp-toggle {
-      display:flex; align-items:center; gap:10px;
-      font-size:16px; font-weight:bold; letter-spacing:2px;
-      color:#aaa; cursor:pointer; user-select:none;
+    /* Mode radio row */
+    #mode-row { display:flex; gap:24px; align-items:center; }
+    .mode-label {
+      display:flex; align-items:center; gap:7px;
+      font-size:14px; font-weight:bold; letter-spacing:1px;
+      color:#aaa; cursor:pointer;
     }
-    #pvp-check { width:20px; height:20px; cursor:pointer; accent-color:#00ffcc; }
+    .mode-label input[type="radio"] { accent-color:#00ffcc; width:17px; height:17px; cursor:pointer; }
+
+    /* Infection HUD */
+    #infect-hud {
+      position:absolute; top:60px; left:50%; transform:translateX(-50%);
+      display:none; flex-direction:column; align-items:center;
+    }
+    #infect-count { font-size:13px; font-weight:bold; letter-spacing:2px; }
+
+    /* Minigame overlay */
+    #minigame-ui {
+      position:fixed; bottom:110px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.88); border:2px solid #00ffcc; border-radius:12px;
+      padding:18px 28px; text-align:center; min-width:300px;
+      display:none; flex-direction:column; gap:6px; z-index:85;
+    }
+    #mg-title { font-size:11px; letter-spacing:3px; color:#00ffcc; }
+    .mg-label { font-size:15px; font-weight:bold; margin-bottom:4px; }
+    .mg-bar-wrap { width:100%; height:14px; background:#222; border-radius:7px; overflow:hidden; }
+    .mg-bar-fill { height:100%; background:#00ffcc; border-radius:7px; transition:width .05s; }
+    #mg-count { font-size:20px; font-weight:bold; }
+    #mg-timer,#mg-misses { font-size:12px; color:#888; }
+    .mg-timing-wrap { position:relative; width:100%; height:26px; background:#222; border-radius:6px; overflow:hidden; margin:6px 0; }
+    .mg-timing-zone { position:absolute; top:0; height:100%; background:rgba(0,255,100,0.45); border-radius:4px; }
+    .mg-timing-cursor { position:absolute; top:0; width:4px; height:100%; background:#fff; transform:translateX(-50%); transition:left .016s linear; }
+    #mg-seq-row { display:flex; gap:8px; justify-content:center; margin:8px 0; }
+    .mg-seq-key { width:36px; height:36px; background:#222; border:2px solid #444; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+    .mg-seq-key.mg-seq-active { border-color:#00ffcc; color:#00ffcc; background:#0a2525; }
+    .mg-seq-key.mg-seq-done  { background:#007744; border-color:#007744; color:#fff; }
+    .mg-hint { font-size:11px; color:#555; }
 
     /* Carrying indicator */
     #carry-hint {
@@ -191,6 +221,13 @@
   <div id="pvp-hud">
     <div id="pvp-teams"></div>
     <div id="pvp-weapon"></div>
+  </div>
+  <div id="infect-hud">
+    <div id="infect-count"></div>
+  </div>
+  <div id="minigame-ui">
+    <div id="mg-title">HACK PANEL</div>
+    <div id="mg-content"></div>
   </div>
   <div id="stamina-bar">
     <div id="stamina-label">SPRINT</div>
@@ -233,7 +270,11 @@
     </div>
   </div>
 
-  <label id="pvp-toggle"><input type="checkbox" id="pvp-check"> PVP MODE</label>
+  <div id="mode-row">
+    <label class="mode-label"><input type="radio" name="gamemode" value="normal" checked> Normal</label>
+    <label class="mode-label"><input type="radio" name="gamemode" value="pvp"> PVP</label>
+    <label class="mode-label"><input type="radio" name="gamemode" value="infection"> Infection</label>
+  </div>
   <button id="play-btn">PLAY</button>
 </div>
 
