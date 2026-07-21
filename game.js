@@ -273,7 +273,6 @@ const messageEl     = document.getElementById('message');
 const flashEl       = document.getElementById('flash');
 const carryHint     = document.getElementById('carry-hint');
 const spSegs        = [0,1,2].map(i => document.getElementById(`sp-${i}`));
-const sprintFill    = document.getElementById('sprint-fill');
 
 // ─── Player choices ───────────────────────────────────────────────────────────
 let chosenColor = AU_COLORS[0].hex;
@@ -900,11 +899,12 @@ function spawnEnemies() {
 
 // ─── HP / damage ─────────────────────────────────────────────────────────────
 function updateStaminaHUD() {
+  const litSprint = Math.ceil(player.stamina / 100 * player.hp);
   spSegs.forEach((s, i) => {
-    s.classList.toggle('lost', i >= player.hp);
-    s.classList.remove('depleted');
+    const hpLost = i >= player.hp;
+    s.classList.toggle('lost',     hpLost);
+    s.classList.toggle('depleted', !hpLost && i >= litSprint);
   });
-  sprintFill.style.width = player.stamina + '%';
 }
 
 function damagePlayer() {
