@@ -1870,47 +1870,38 @@ function loop() {
 const MG_TYPES = ['mash','timing','sequence'];
 
 function addInfectedMouth(g) {
-  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
-  const toothMat = new THREE.MeshLambertMaterial({ color: 0xddeedd });
-  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xdd2255 });
+  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x050505 });
+  const toothMat = new THREE.MeshLambertMaterial({ color: 0xccddcc });
+  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xcc1144 });
 
-  // Wide dark mouth hole
-  const hole = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.06), darkMat);
-  hole.position.set(0, 0.635, 0.305);
+  // Very wide tall dark mouth hole
+  const hole = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.20, 0.07), darkMat);
+  hole.position.set(0, 0.63, 0.30);
   g.add(hole);
 
-  // Upper teeth — 4 irregular downward-pointing fangs
-  const upperTeeth = [
-    { x: -0.10, w: 0.055, h: 0.09 },
-    { x: -0.03, w: 0.048, h: 0.11 },
-    { x:  0.04, w: 0.052, h: 0.08 },
-    { x:  0.11, w: 0.044, h: 0.10 },
-  ];
-  for (const t of upperTeeth) {
-    const tooth = new THREE.Mesh(new THREE.BoxGeometry(t.w, t.h, 0.05), toothMat);
-    tooth.position.set(t.x, 0.715 - t.h / 2, 0.31);
+  // Upper teeth — 3 large downward cones
+  for (const [x, r, h] of [[-0.11, 0.07, 0.14], [0.01, 0.075, 0.16], [0.13, 0.065, 0.12]]) {
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(r, h, 5), toothMat);
+    tooth.rotation.z = Math.PI; // point downward
+    tooth.position.set(x, 0.725 - h * 0.45, 0.31);
     g.add(tooth);
   }
 
-  // Lower teeth — 3 upward-pointing fangs
-  const lowerTeeth = [
-    { x: -0.07, w: 0.05, h: 0.08 },
-    { x:  0.0,  w: 0.04, h: 0.10 },
-    { x:  0.08, w: 0.048, h: 0.07 },
-  ];
-  for (const t of lowerTeeth) {
-    const tooth = new THREE.Mesh(new THREE.BoxGeometry(t.w, t.h, 0.05), toothMat);
-    tooth.position.set(t.x, 0.555 + t.h / 2, 0.31);
+  // Lower teeth — 2 large upward cones
+  for (const [x, r, h] of [[-0.08, 0.065, 0.12], [0.09, 0.07, 0.13]]) {
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(r, h, 5), toothMat);
+    tooth.position.set(x, 0.535 + h * 0.45, 0.31);
     g.add(tooth);
   }
 
-  // Tongue drooping out from centre-bottom
-  const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, 0.04), tongueMat);
-  tongue.position.set(0.01, 0.50, 0.31);
-  tongue.rotation.x = 0.28;
+  // Tongue — flat wide drooping shape
+  const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.15, 0.045), tongueMat);
+  tongue.position.set(0.01, 0.495, 0.315);
+  tongue.rotation.x = 0.32;
   g.add(tongue);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 6), tongueMat);
-  tip.position.set(0.01, 0.435, 0.335);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.056, 8, 6), tongueMat);
+  tip.scale.set(1, 0.6, 0.8);
+  tip.position.set(0.01, 0.42, 0.345);
   g.add(tip);
 }
 
