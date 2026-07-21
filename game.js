@@ -1277,7 +1277,8 @@ function updatePlayer(dt) {
     player.stamina = Math.min(100, player.stamina + 20 * dt);
   }
   updateStaminaHUD();
-  const spd = sprinting ? PLAYER_SPEED * SPRINT_MULT : PLAYER_SPEED;
+  const baseSpd = (infectionMode && playerInfected) ? PLAYER_SPEED * 0.5 : PLAYER_SPEED;
+  const spd = sprinting ? baseSpd * SPRINT_MULT : baseSpd;
 
   if (move.lengthSq() > 0) {
     move.normalize();
