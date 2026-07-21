@@ -2084,7 +2084,7 @@ function updateCutscene(dt) {
 
     // Phase 2 (0.25–0.65): tongue shoots out
     const tongueT = Math.max(0, Math.min(1, (t - 0.25) / 0.4));
-    const tongueLen = tongueT * 2.58; // attacker face to player face gap
+    const tongueLen = tongueT * 1.98; // attacker face (-0.99) to player face (+0.99)
     tongueMesh.scale.x = tongueLen;
 
     // Phase 3 (0.65–1.0): player shakes and turns green
@@ -2266,32 +2266,35 @@ function showInfectCutscene() {
 
 function startInfectAttackCutscene(attackerColor, attackerHat) {
   csScene = new THREE.Scene();
-  csScene.background = new THREE.Color(0x020a04);
-  csScene.add(new THREE.AmbientLight(0x224422, 1.2));
-  const key = new THREE.PointLight(0x33ff66, 2.0, 12);
-  key.position.set(0, 4, 3);
+  csScene.background = new THREE.Color(0x010802);
+  csScene.add(new THREE.AmbientLight(0x113311, 2.0));
+  const key = new THREE.PointLight(0x44ff66, 2.5, 14);
+  key.position.set(0, 4, 2);
   csScene.add(key);
-  csGreenLight = new THREE.PointLight(0x33ff66, 0.5, 10);
-  csGreenLight.position.set(0, 1, 2);
+  csGreenLight = new THREE.PointLight(0x33ff66, 1.0, 8);
+  csGreenLight.position.set(-1, 1.5, 1);
   csScene.add(csGreenLight);
 
-  // Attacker (infected NPC) on the left
+  // Attacker (infected NPC) on the left, rotated to face right (+X) toward player
   const attackerMesh = makeCrewmate(attackerColor, attackerHat, 'none');
   tintInfected(attackerMesh);
   attackerMesh.position.set(-1.3, 0, 0);
+  attackerMesh.rotation.y = Math.PI / 2; // face right
   csScene.add(attackerMesh);
 
-  // Player on the right
+  // Player on the right, rotated to face left (-X) toward attacker
   const playerMesh = makeCrewmate(chosenColor, chosenHat, chosenMouth);
   playerMesh.position.set(1.3, 0, 0);
+  playerMesh.rotation.y = -Math.PI / 2; // face left
   csScene.add(playerMesh);
 
-  // Tongue spike — a thin box that will extend from attacker face toward player
+  // Tongue — BoxGeometry with pivot shifted to left end so it grows rightward
+  // With rotation.y=PI/2, attacker face (local z=0.31) maps to world x=-1.3+0.31=-0.99
   const tongueMat = new THREE.MeshLambertMaterial({ color: 0xcc1144 });
-  const tongueMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.07, 0.07), tongueMat);
-  // Pivot at left end: offset box geometry so left edge is at origin
-  tongueMesh.geometry.translate(0.5, 0, 0);
-  tongueMesh.position.set(-1.3 + 0.01, 0.63, 0.31);
+  const tongueGeo = new THREE.BoxGeometry(1, 0.07, 0.07);
+  tongueGeo.translate(0.5, 0, 0); // pivot at left end
+  const tongueMesh = new THREE.Mesh(tongueGeo, tongueMat);
+  tongueMesh.position.set(-0.99, 0.63, 0); // attacker face world position
   tongueMesh.scale.x = 0;
   csScene.add(tongueMesh);
 
@@ -2305,22 +2308,22 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
     }
   });
 
-  csCamera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 50);
-  csCamera.position.set(0, 0.9, 3.8);
-  csCamera.lookAt(0, 0.7, 0);
+  csCamera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.05, 50);
+  // Camera slightly to the side so both profiles are clearly visible
+  csCamera.position.set(0, 1.1, 4.2);
+  csCamera.lookAt(0, 0.65, 0);
 
   csScene.userData = { csType:'attack', attackerMesh, playerMesh, tongueMesh };
   csActive = true;
   csTime = 0;
 
-  // Show infection text overlay after tongue hits
   const el = document.getElementById('infect-cutscene');
   if (el) {
     el.style.display = 'none';
     setTimeout(() => {
       el.style.display = 'flex';
       el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
-    }, 1800);
+    }, 1900);
     setTimeout(() => { el.style.display = 'none'; }, 3400);
   }
 }
