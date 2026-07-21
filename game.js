@@ -850,7 +850,9 @@ function makeMouth(id) {
     const startX = -(n * spanX) / 2;
     for (let i = 0; i < n; i++) {
       const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.018, 0.018), mat);
-      seg.position.set(startX + (i + 0.5) * spanX, 0.645 + (i % 2 === 0 ? spanY * 0.5 : -spanY * 0.5), 0.315);
+      // All centers at same y so segments meet flush at their endpoints
+      seg.position.set(startX + (i + 0.5) * spanX, 0.645, 0.315);
+      // i=0 goes down-right (starts high), i=1 goes up-right, alternating
       seg.rotation.z = i % 2 === 0 ? -angle : angle;
       grp.add(seg);
     }
@@ -1007,7 +1009,7 @@ function spawnNPCs() {
   for (let i=0; i<npcSpawnCount; i++) {
     const col = NPC_COLORS_POOL[i % NPC_COLORS_POOL.length];
     const hat = NPC_HATS[i % NPC_HATS.length];
-    const mesh = makeCrewmate(col, hat);
+    const mesh = makeCrewmate(col, hat, 'none');
     const a = (i/NPC_COUNT)*Math.PI*2;
     mesh.position.set(bx+Math.cos(a)*1.6, 0, bz+Math.sin(a)*1.6);
     scene.add(mesh);
