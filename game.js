@@ -432,6 +432,7 @@ let playerIsImp  = false;
 let susOver      = false;
 let susKillCd    = 0;
 let susSabotage  = null;
+let susMeeting   = null; // { phase:'voting'|'results', timer, votes:{}, playerVoted, entities[], ejected }
 
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
@@ -1752,8 +1753,8 @@ function interact() {
     else activatePanel(lookTarget.obj);
   } else if (lookTarget.type === 'head' && !player.carrying) {
     if (susMode) {
-      showMessage('BODY REPORTED!', 2500);
       doFlash(0xff8800, 0.5);
+      startMeeting();
     } else {
       player.carrying = lookTarget.head;
       lookTarget.head.carriedBy = 'player';
@@ -1966,9 +1967,13 @@ function loop() {
     if (pvpMode) {
       updatePVP(dt);
     } else if (susMode) {
-      updateNPCs(dt);
-      updateSus(dt);
-      checkElevatorFill();
+      if (susMeeting) {
+        updateMeeting(dt);
+      } else {
+        updateNPCs(dt);
+        updateSus(dt);
+        checkElevatorFill();
+      }
     } else if (infectionMode) {
       updateNPCs(dt);
       updateInfection(dt);
@@ -2408,6 +2413,166 @@ function updateSus(dt) {
     }
   }
   updateSusHUD();
+}
+
+// ─── Sus meeting / voting ─────────────────────────────────────────────────────
+function colorNameOf(hex) {
+  return (AU_COLORS.find(c => c.hex === hex) || {name:'???'}).name;
+}
+
+function meetingEntities() {
+  const list = [];
+  list.push({ id:'player', color:chosenColor, label:'You', isImp:playerIsImp, dead:player.dead });
+  npcs.forEach((n,i) => list.push({ id:`npc${i}`, color:n.color, label:colorNameOf(n.color), isImp:n.isImp, dead:n.dead, npc:n }));
+  return list;
+}
+
+function startMeeting() {
+  if (susMeeting) return;
+  susMeeting = { phase:'voting', timer:15, votes:{}, playerVoted:false, ejected:null };
+  susMeeting.entities = meetingEntities().filter(e => !e.dead);
+
+  renderMeetingUI();
+  document.getElementById('meeting-ui').style.display = 'flex';
+
+  // Schedule NPC votes (random delay 2-9s)
+  for (const e of susMeeting.entities) {
+    if (e.id === 'player') continue;
+    const delay = 2000 + Math.random() * 7000;
+    setTimeout(() => {
+      if (!susMeeting || susMeeting.phase !== 'voting') return;
+      const others = susMeeting.entities.filter(o => o.id !== e.id);
+      if (!others.length) return;
+      // Imps vote for a random crewmate; crew vote randomly
+      const pool = e.isImp ? others.filter(o => !o.isImp) : others;
+      const pick  = (pool.length ? pool : others)[Math.floor(Math.random() * (pool.length || others.length))];
+      castVote(e.id, pick.id);
+    }, delay);
+  }
+}
+
+function renderMeetingUI() {
+  const grid = document.getElementById('meeting-grid');
+  grid.innerHTML = '';
+  for (const e of susMeeting.entities) {
+    const tile = document.createElement('div');
+    tile.className = 'mtile';
+    tile.dataset.eid = e.id;
+    tile.innerHTML = `
+      <div class="mtile-avatar" style="background:#${e.color.toString(16).padStart(6,'0')}"></div>
+      <div class="mtile-name">${e.label}</div>
+      <div class="mtile-votes" id="mvotes-${e.id}"></div>`;
+    if (e.id !== 'player') {
+      tile.addEventListener('click', () => {
+        if (!susMeeting || susMeeting.playerVoted || susMeeting.phase !== 'voting') return;
+        castVote('player', e.id);
+      });
+    }
+    grid.appendChild(tile);
+  }
+  document.getElementById('meeting-result-text').textContent = '';
+  document.getElementById('meeting-timer-display').textContent = '15';
+  document.getElementById('meeting-skip-btn').onclick = () => {
+    if (!susMeeting || susMeeting.playerVoted || susMeeting.phase !== 'voting') return;
+    castVote('player', 'skip');
+  };
+}
+
+function castVote(voterId, targetId) {
+  if (!susMeeting) return;
+  susMeeting.votes[voterId] = targetId;
+  if (voterId === 'player') susMeeting.playerVoted = true;
+  refreshVoteTiles();
+}
+
+function refreshVoteTiles() {
+  if (!susMeeting) return;
+  // Count votes per target
+  const counts = {};
+  for (const t of Object.values(susMeeting.votes)) counts[t] = (counts[t]||0) + 1;
+  for (const e of susMeeting.entities) {
+    const el = document.getElementById(`mvotes-${e.id}`);
+    if (el) el.textContent = '●'.repeat(counts[e.id]||0);
+  }
+  // Highlight player's choice
+  document.querySelectorAll('.mtile').forEach(t => t.classList.remove('mtile-chosen'));
+  if (susMeeting.playerVoted) {
+    const chosen = susMeeting.votes['player'];
+    const tile = document.querySelector(`.mtile[data-eid="${chosen}"]`);
+    if (tile) tile.classList.add('mtile-chosen');
+  }
+}
+
+function endVoting() {
+  if (!susMeeting) return;
+  susMeeting.phase = 'results';
+  susMeeting.timer = 5;
+
+  const counts = {};
+  for (const t of Object.values(susMeeting.votes)) counts[t] = (counts[t]||0) + 1;
+  // Find highest vote count (excluding 'skip')
+  let maxVotes = 0, ejectedId = null;
+  for (const [id, n] of Object.entries(counts)) {
+    if (id === 'skip') continue;
+    if (n > maxVotes) { maxVotes = n; ejectedId = id; }
+    else if (n === maxVotes) ejectedId = null; // tie
+  }
+
+  const skipCount = counts['skip'] || 0;
+  if (skipCount > maxVotes) ejectedId = null;
+
+  susMeeting.ejected = ejectedId;
+  const resultEl = document.getElementById('meeting-result-text');
+  document.getElementById('meeting-skip-btn').style.display = 'none';
+  document.getElementById('meeting-timer-display').textContent = '';
+
+  if (!ejectedId) {
+    resultEl.textContent = 'No one was ejected.';
+  } else {
+    const e = susMeeting.entities.find(x => x.id === ejectedId);
+    const wasImp = e ? e.isImp : false;
+    resultEl.innerHTML = `<span style="color:#${e ? e.color.toString(16).padStart(6,'0') : 'fff'}">${e ? e.label : '?'}</span> was ejected.<br>${wasImp ? 'They were an Impostor.' : 'They were not an Impostor.'}`;
+  }
+
+  // Tint chosen tile
+  document.querySelectorAll('.mtile').forEach(t => {
+    const eid = t.dataset.eid;
+    if (eid === ejectedId) t.classList.add('mtile-ejected');
+  });
+}
+
+function endMeeting() {
+  const ejectedId = susMeeting ? susMeeting.ejected : null;
+  susMeeting = null;
+  document.getElementById('meeting-ui').style.display = 'none';
+  document.getElementById('meeting-skip-btn').style.display = '';
+
+  if (ejectedId) {
+    if (ejectedId === 'player') {
+      player.dead = true;
+      player.mesh.visible = false;
+      showMessage('YOU WERE EJECTED', 3000);
+    } else {
+      const idx = parseInt(ejectedId.replace('npc',''));
+      const npc = npcs[idx];
+      if (npc) { npc.dead = true; npc.mesh.visible = false; }
+    }
+  }
+  checkSusWin();
+  updateSusHUD();
+  updateCrewDots();
+}
+
+function updateMeeting(dt) {
+  if (!susMeeting) return;
+  susMeeting.timer -= dt;
+  const timerEl = document.getElementById('meeting-timer-display');
+  if (susMeeting.phase === 'voting') {
+    if (timerEl) timerEl.textContent = Math.ceil(Math.max(0, susMeeting.timer));
+    if (susMeeting.timer <= 0) endVoting();
+  } else {
+    if (susMeeting.timer <= 0) endMeeting();
+  }
 }
 
 // ─── PVP ──────────────────────────────────────────────────────────────────────

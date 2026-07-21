@@ -230,6 +230,45 @@
     #sus-kill-info, #sus-sab-info { font-size:12px; font-weight:bold; letter-spacing:1px; }
     #sus-sabotage-bar { font-size:13px; font-weight:bold; }
 
+    /* Meeting / voting overlay */
+    #meeting-ui {
+      position:fixed; inset:0; z-index:95;
+      display:none; flex-direction:column; align-items:center; justify-content:center;
+      background:rgba(0,0,10,0.92);
+    }
+    #meeting-header {
+      font-size:28px; font-weight:900; letter-spacing:5px; color:#ff4444;
+      text-shadow:0 0 20px #ff4444; margin-bottom:14px;
+    }
+    #meeting-grid {
+      display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+      max-width:640px; margin-bottom:16px;
+    }
+    .mtile {
+      width:90px; display:flex; flex-direction:column; align-items:center; gap:5px;
+      background:#111; border:2px solid #333; border-radius:10px;
+      padding:10px 6px; cursor:pointer; transition:border-color .15s;
+    }
+    .mtile:hover { border-color:#aaa; }
+    .mtile.mtile-chosen { border-color:#00ffcc; }
+    .mtile.mtile-ejected { border-color:#ff4444; background:#200; }
+    .mtile-avatar {
+      width:44px; height:44px; border-radius:50%;
+    }
+    .mtile-name { font-size:11px; color:#ccc; text-align:center; }
+    .mtile-votes { font-size:13px; color:#ff4444; min-height:16px; }
+    #meeting-bottom {
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+    }
+    #meeting-result-text { font-size:20px; font-weight:bold; text-align:center; min-height:48px; }
+    #meeting-timer-display { font-size:36px; font-weight:900; color:#ffcc00; }
+    #meeting-skip-btn {
+      background:#222; color:#fff; border:2px solid #555;
+      padding:8px 28px; font-size:14px; border-radius:20px; cursor:pointer;
+      letter-spacing:2px;
+    }
+    #meeting-skip-btn:hover { border-color:#aaa; }
+
     /* Carrying indicator */
     #carry-hint {
       position:absolute; top:60%; left:50%; transform:translateX(-50%);
@@ -269,6 +308,15 @@
   </div>
   <div id="infect-hud">
     <div id="infect-count"></div>
+  </div>
+  <div id="meeting-ui">
+    <div id="meeting-header">EMERGENCY MEETING</div>
+    <div id="meeting-grid"></div>
+    <div id="meeting-bottom">
+      <div id="meeting-result-text"></div>
+      <div id="meeting-timer-display"></div>
+      <button id="meeting-skip-btn">SKIP</button>
+    </div>
   </div>
   <div id="minigame-ui">
     <div id="mg-title">HACK PANEL</div>
@@ -336,6 +384,6 @@
   }
 }
 </script>
-<script type="module" src="game.js?v=5"></script>
+<script type="module" src="game.js?v=6"></script>
 </body>
 </html>
