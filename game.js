@@ -1599,6 +1599,7 @@ function updateNPCs(dt) {
     // ── Pick up nearby dead head ──
     if (!npc.carrying) {
       const nearHead = deadHeads.find(dh => !dh.carriedBy &&
+        dh.killedBy !== npc &&
         Math.hypot(npc.mesh.position.x-dh.grp.position.x, npc.mesh.position.z-dh.grp.position.z) < 1.5);
       if (nearHead) { nearHead.carriedBy = 'npc'; npc.carrying = nearHead; }
     }
@@ -1750,8 +1751,13 @@ function interact() {
     if (infectionMode) { if (!playerInfected) startMinigame(lookTarget.obj); }
     else activatePanel(lookTarget.obj);
   } else if (lookTarget.type === 'head' && !player.carrying) {
-    player.carrying = lookTarget.head;
-    lookTarget.head.carriedBy = 'player';
+    if (susMode) {
+      showMessage('BODY REPORTED!', 2500);
+      doFlash(0xff8800, 0.5);
+    } else {
+      player.carrying = lookTarget.head;
+      lookTarget.head.carriedBy = 'player';
+    }
   }
 }
 
@@ -2284,13 +2290,13 @@ function initSus() {
   updateSusHUD();
 }
 
-function susKillNPC(npc) {
+function susKillNPC(npc, killer = null) {
   npc.dead = true;
   npc.mesh.visible = false;
   const head = makeDeadHead(npc.color);
   head.position.copy(npc.mesh.position).setY(0.5);
   scene.add(head);
-  deadHeads.push({ grp: head, carriedBy: null });
+  deadHeads.push({ grp: head, carriedBy: null, killedBy: killer });
   updateCrewDots();
   checkSusWin();
   updateSusHUD();
@@ -2395,7 +2401,7 @@ function updateSus(dt) {
       const crewWitness = npcs.some(n => !n.isImp && !n.dead && n !== target &&
         n.mesh.position.distanceTo(npc.mesh.position) < SUS_WITNESS_RANGE);
       if (!playerWitness && !crewWitness) {
-        susKillNPC(target);
+        susKillNPC(target, npc);
         npc.killCd = SUS_IMP_KILL_CD;
         break;
       }
