@@ -2074,37 +2074,81 @@ function updateCutscene(dt) {
 
   // attack cutscene has no .char — handle it before the char guard
   if (csType === 'attack') {
-    const { attackerMesh, playerMesh, tongueMesh } = csScene.userData;
-    // Phase 1 (0–0.1): brief pause before tongue
-    // Phase 2 (0.1-0.35): tongue shoots out fast
-    const tongueT = Math.max(0, Math.min(1, (t - 0.1) / 0.25));
-    const maxLen = 1.98; // x=-0.99 (attacker face) to x=+0.99 (player face)
+    const { attackerMesh, playerMesh, tongueMesh, roarMouth } = csScene.userData;
+    const ct = csTime;
+
+    // Phase 1 (0–0.36s): pause
+    // Phase 2 (0.36–1.26s): tongue shoots out
+    const tongueT = Math.max(0, Math.min(1, (ct - 0.36) / 0.9));
+    const maxLen = 1.98;
     let curLen = Math.max(0.001, tongueT * maxLen);
 
-    // Phase 3 (0.35-1.0): player shakes + turns green, tongue retracts
-    const infectT = Math.max(0, Math.min(1, (t - 0.35) / 0.45));
-    if (infectT > 0) curLen = Math.max(0.001, curLen * (1 - Math.min(1, infectT / 0.6)));
+    // Phase 3 (1.26–2.52s): shake + infect, tongue retracts
+    const infectT = Math.max(0, Math.min(1, (ct - 1.26) / 1.26));
+    if (infectT > 0) curLen = Math.max(0.001, curLen * (1 - Math.min(1, infectT * 1.67)));
 
-    // Slide box center so left edge stays fixed at attacker face (x=-0.99)
     tongueMesh.scale.x = curLen;
     tongueMesh.position.x = -0.99 + curLen / 2;
 
-    const shake = infectT < 0.8 ? Math.sin(csTime * 45) * infectT * 0.07 : 0;
-    playerMesh.position.x = 1.3 + shake;
-    playerMesh.rotation.z = Math.sin(csTime * 38) * infectT * 0.05;
-    const green = new THREE.Color(0x33bb44);
-    for (const { mat, orig } of csMats) {
-      mat.color.lerpColors(orig, green, infectT);
-      if (mat.emissive) mat.emissive.setHex(infectT > 0.3 ? 0x114422 : 0x000000);
+    // Phase 4 (2.52–3.3s): player falls
+    const fallT = Math.max(0, Math.min(1, (ct - 2.52) / 0.78));
+    // Phase 5 (3.3–4.4s): player rises to knees, turns to face camera
+    const riseT = Math.max(0, Math.min(1, (ct - 3.3) / 1.1));
+    // Phase 6 (4.4–6.0s): creepy roar
+    const roarT = Math.max(0, Math.min(1, (ct - 4.4) / 1.6));
+
+    const ease = v => v < 0.5 ? 2*v*v : 1 - Math.pow(-2*v+2,2)/2;
+    const shake = infectT < 0.8 && fallT === 0 ? Math.sin(ct * 45) * infectT * 0.07 : 0;
+
+    if (roarT > 0) {
+      playerMesh.rotation.z = Math.sin(ct * 28) * roarT * 0.1;
+      playerMesh.rotation.y = 0;
+      playerMesh.position.set(1.3, 0, 0);
+      if (roarMouth) { const o = Math.min(1, roarT * 3); roarMouth.scale.set(o, o, 1); }
+    } else if (riseT > 0) {
+      const e = ease(riseT);
+      playerMesh.rotation.z = -Math.PI / 2 * (1 - e);
+      playerMesh.rotation.y = -Math.PI / 2 * (1 - e);
+      playerMesh.position.set(1.3, -0.5 * (1 - e), 0);
+    } else if (fallT > 0) {
+      const e = ease(fallT);
+      playerMesh.rotation.z = -Math.PI / 2 * e;
+      playerMesh.position.set(1.3, -0.5 * e, 0);
+      playerMesh.rotation.y = -Math.PI / 2;
+    } else {
+      playerMesh.position.set(1.3 + shake, 0, 0);
+      playerMesh.rotation.z = Math.sin(ct * 38) * infectT * 0.05;
+      playerMesh.rotation.y = -Math.PI / 2;
     }
 
-    // Camera zooms in as tongue shoots, pulls back at end
-    const zoomIn  = Math.min(1, tongueT * 1.6);
-    const zoomOut = Math.max(0, (infectT - 0.7) / 0.3);
-    csCamera.position.set(0, 1.1 - zoomIn * 0.2 + zoomOut * 0.15, 4.2 - zoomIn * 1.8 + zoomOut * 1.4);
-    csCamera.lookAt(0, 0.65, 0);
+    const green = new THREE.Color(0x33bb44);
+    const greenAmt = Math.min(1, infectT * 1.5);
+    const fullyGreen = fallT > 0 || riseT > 0 || roarT > 0;
+    for (const { mat, orig } of csMats) {
+      mat.color.lerpColors(orig, green, fullyGreen ? 1 : greenAmt);
+      if (mat.emissive) mat.emissive.setHex(roarT > 0 ? 0x225533 : (greenAmt > 0.3 ? 0x114422 : 0x000000));
+    }
+    if (csGreenLight) {
+      csGreenLight.intensity = roarT > 0 ? 1.2 + Math.abs(Math.sin(ct * 15)) * 2.0
+        : infectT > 0 ? infectT * 1.2 : 0;
+    }
 
-    if (csTime >= CS_DUR) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
+    // Camera
+    if (roarT > 0) {
+      const z = Math.min(1, roarT * 2);
+      csCamera.position.set(1.3, 0.6 + z * 0.3, 4.2 - z * 2.8);
+      csCamera.lookAt(1.3, 0.8, 0);
+    } else if (riseT > 0) {
+      csCamera.position.set(riseT * 1.3, 1.1, 3.5);
+      csCamera.lookAt(1.3, 0.65, 0);
+    } else {
+      const zoomIn  = Math.min(1, tongueT * 1.6);
+      const zoomOut = Math.max(0, (infectT - 0.7) / 0.3);
+      csCamera.position.set(0, 1.1 - zoomIn * 0.2 + zoomOut * 0.15, 4.2 - zoomIn * 1.8 + zoomOut * 1.4);
+      csCamera.lookAt(0, 0.65, 0);
+    }
+
+    if (ct >= 6.0) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
     return;
   }
 
@@ -2300,6 +2344,15 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
   tongueMesh.scale.x = 0.001;
   csScene.add(tongueMesh);
 
+  // Roar mouth — dark gape on player's front face, starts closed, opens during roar
+  const roarMouth = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.22, 0.07),
+    new THREE.MeshLambertMaterial({ color: 0x050805 })
+  );
+  roarMouth.position.set(0, 0.60, 0.32);
+  roarMouth.scale.set(0, 0, 1);
+  playerMesh.add(roarMouth);
+
   csMats = [];
   playerMesh.traverse(child => {
     if (child.isMesh && child.material && child.material.color &&
@@ -2315,7 +2368,7 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
   csCamera.position.set(0, 1.1, 4.2);
   csCamera.lookAt(0, 0.65, 0);
 
-  csScene.userData = { csType:'attack', attackerMesh, playerMesh, tongueMesh };
+  csScene.userData = { csType:'attack', attackerMesh, playerMesh, tongueMesh, roarMouth };
   csActive = true;
   csTime = 0;
 
@@ -2325,8 +2378,8 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
     setTimeout(() => {
       el.style.display = 'flex';
       el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
-    }, 1900);
-    setTimeout(() => { el.style.display = 'none'; }, 3400);
+    }, 4800);
+    setTimeout(() => { el.style.display = 'none'; }, 6200);
   }
 }
 
