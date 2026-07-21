@@ -1870,25 +1870,47 @@ function loop() {
 const MG_TYPES = ['mash','timing','sequence'];
 
 function addInfectedMouth(g) {
-  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x111111 });
-  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xee3366 });
+  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+  const toothMat = new THREE.MeshLambertMaterial({ color: 0xddeedd });
+  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xdd2255 });
 
-  // Mouth slot on lower face
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.05), darkMat);
-  mouth.position.set(0, 0.64, 0.31);
-  mouth.rotation.z = 0.18; // slight droopy tilt
-  g.add(mouth);
+  // Wide dark mouth hole
+  const hole = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.06), darkMat);
+  hole.position.set(0, 0.635, 0.305);
+  g.add(hole);
 
-  // Tongue hanging out
-  const tongue = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.036, 0.2, 8), tongueMat);
-  tongue.position.set(0.03, 0.53, 0.3);
-  tongue.rotation.x = 0.35; // angle forward/down
-  tongue.rotation.z = 0.18;
+  // Upper teeth — 4 irregular downward-pointing fangs
+  const upperTeeth = [
+    { x: -0.10, w: 0.055, h: 0.09 },
+    { x: -0.03, w: 0.048, h: 0.11 },
+    { x:  0.04, w: 0.052, h: 0.08 },
+    { x:  0.11, w: 0.044, h: 0.10 },
+  ];
+  for (const t of upperTeeth) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(t.w, t.h, 0.05), toothMat);
+    tooth.position.set(t.x, 0.715 - t.h / 2, 0.31);
+    g.add(tooth);
+  }
+
+  // Lower teeth — 3 upward-pointing fangs
+  const lowerTeeth = [
+    { x: -0.07, w: 0.05, h: 0.08 },
+    { x:  0.0,  w: 0.04, h: 0.10 },
+    { x:  0.08, w: 0.048, h: 0.07 },
+  ];
+  for (const t of lowerTeeth) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(t.w, t.h, 0.05), toothMat);
+    tooth.position.set(t.x, 0.555 + t.h / 2, 0.31);
+    g.add(tooth);
+  }
+
+  // Tongue drooping out from centre-bottom
+  const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, 0.04), tongueMat);
+  tongue.position.set(0.01, 0.50, 0.31);
+  tongue.rotation.x = 0.28;
   g.add(tongue);
-
-  // Tongue tip (rounded blob)
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), tongueMat);
-  tip.position.set(0.03, 0.43, 0.33);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 6), tongueMat);
+  tip.position.set(0.01, 0.435, 0.335);
   g.add(tip);
 }
 
