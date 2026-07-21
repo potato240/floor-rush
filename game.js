@@ -1754,11 +1754,96 @@ function togglePOV() {
   showMessage(firstPerson ? 'FIRST PERSON' : 'THIRD PERSON', 900);
 }
 
+// ─── Infect cutscene ─────────────────────────────────────────────────────────
+let csActive = false, csTime = 0;
+const CS_DUR = 3.6;
+let csScene = null, csCamera = null, csMats = [], csGreenLight = null;
+
+function startInfectCutscene() {
+  csScene = new THREE.Scene();
+  csScene.background = new THREE.Color(0x000000);
+  csScene.add(new THREE.AmbientLight(0xffffff, 0.4));
+  const key = new THREE.PointLight(0xffffff, 2.0, 10);
+  key.position.set(1.5, 3, 2);
+  csScene.add(key);
+  csGreenLight = new THREE.PointLight(0x33ff66, 0, 8);
+  csGreenLight.position.set(-1, 2, 1);
+  csScene.add(csGreenLight);
+
+  const mesh = makeCrewmate(chosenColor, chosenHat);
+  mesh.position.set(0, 0, 0);
+  csScene.userData.char = mesh;
+  csScene.add(mesh);
+
+  csMats = [];
+  mesh.traverse(child => {
+    if (child.isMesh && child.material && child.material.color &&
+        !(child.material instanceof THREE.MeshBasicMaterial)) {
+      const m = child.material.clone();
+      child.material = m;
+      csMats.push({ mat: m, orig: m.color.clone() });
+    }
+  });
+
+  csCamera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 50);
+  csCamera.position.set(0, 0.8, 2.6);
+  csCamera.lookAt(0, 0.7, 0);
+
+  csActive = true;
+  csTime = 0;
+
+  // text overlay timing
+  const el = document.getElementById('infect-cutscene');
+  if (el) {
+    el.style.display = 'none';
+    setTimeout(() => {
+      el.style.display = 'flex';
+      el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    }, 900);
+    setTimeout(() => { el.style.display = 'none'; }, 3200);
+  }
+}
+
+function updateCutscene(dt) {
+  csTime += dt;
+  const t = Math.min(csTime / CS_DUR, 1);
+  const mesh = csScene && csScene.userData.char;
+  if (!mesh) return;
+
+  const tremble = t < 0.25 ? 0 : t < 0.6 ? (t - 0.25) / 0.35 : t < 0.85 ? 1 - (t - 0.6) / 0.25 : 0;
+  mesh.position.x = tremble * Math.sin(csTime * 42) * 0.045;
+  mesh.position.y = tremble * Math.abs(Math.sin(csTime * 36) * 0.03);
+  mesh.rotation.z = tremble * Math.sin(csTime * 30) * 0.045;
+
+  const infect = Math.max(0, Math.min(1, (t - 0.35) / 0.5));
+  const green = new THREE.Color(0x33bb44);
+  for (const { mat, orig } of csMats) {
+    mat.color.lerpColors(orig, green, infect);
+    if (mat.emissive) mat.emissive.setHex(infect > 0.4 ? 0x114422 : 0x000000);
+  }
+  if (csGreenLight) csGreenLight.intensity = infect * 2.0;
+
+  csCamera.position.z = 2.6 - t * 0.2 + (t > 0.82 ? (t - 0.82) * 3 : 0);
+  csCamera.lookAt(0, 0.7, 0);
+
+  if (csTime >= CS_DUR) {
+    csActive = false;
+    csScene = null; csMats = []; csGreenLight = null;
+  }
+}
+
 // ─── Loop ─────────────────────────────────────────────────────────────────────
 function loop() {
   raf = requestAnimationFrame(loop);
   try {
     const dt = Math.min(clock.getDelta(), 0.05);
+
+    if (csActive) {
+      updateCutscene(dt);
+      if (csScene && csCamera) renderer.render(csScene, csCamera);
+      return;
+    }
+
     if (locked) {
       updatePlayer(dt);
       checkLookTarget();
@@ -1813,14 +1898,7 @@ function infectEntity(entity) {
 }
 
 function showInfectCutscene() {
-  const el = document.getElementById('infect-cutscene');
-  if (!el) return;
-  el.style.display = 'flex';
-  el.style.animation = 'none';
-  void el.offsetWidth; // reflow to restart animation
-  el.style.animation = '';
-  setTimeout(() => { el.style.display = 'none'; }, 3200);
-  doFlash(0x00ff44, 0.9);
+  startInfectCutscene();
 }
 
 function initInfection() {
