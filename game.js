@@ -54,6 +54,7 @@ const AU_COLORS = [
   { name:'Rose',    hex:0xff63d4 },
   { name:'Banana',  hex:0xffff7a },
   { name:'Olive',   hex:0x847a37 },
+  { name:'Army',    hex:0x6b8c00 },
 ];
 
 // ─── Hat definitions ──────────────────────────────────────────────────────────
@@ -1266,7 +1267,8 @@ function updatePlayer(dt) {
   // ── PVP weapon auto-pickup + cooldown ──
   if (pvpMode) {
     if (player.weapon) player.weapon.cd = Math.max(0, player.weapon.cd - dt);
-    else {
+    const needsWeapon = !player.weapon || (player.weapon.type === 'pistol' && player.weapon.ammo <= 0);
+    if (needsWeapon) {
       for (let i = wPickups.length - 1; i >= 0; i--) {
         if (player.pos.distanceTo(wPickups[i].mesh.position) < 1.3) {
           const wp = wPickups.splice(i, 1)[0];
