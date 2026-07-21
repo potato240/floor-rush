@@ -1800,6 +1800,7 @@ function initPVP() {
       hp:3, dead:false, damageCooldown:0, weapon:null, path:[], pathStep:0, pathTimer:0 });
   }
   spawnPVPWeapons();
+  player.weapon = { type: 'pistol', ammo: PVP_PISTOL_AMMO, cd: 0 };
   updateWeaponHUD(); updatePVPTeamHUD();
 }
 
@@ -1897,12 +1898,12 @@ function updatePVP(dt) {
     if (!hit) {
       const targets = b.team === 'blue' ? pvpRed : pvpBlue;
       for (const t of targets) {
-        if (!t.dead && b.mesh.position.distanceTo(t.mesh.position) < 0.6) {
+        if (!t.dead && b.mesh.position.distanceTo(t.mesh.position) < 0.9) {
           damagePVPFighter(t); hit = true; break;
         }
       }
       if (!hit && b.team === 'red' && !player.dead &&
-          b.mesh.position.distanceTo(player.pos) < 0.6) {
+          b.mesh.position.distanceTo(player.pos) < 0.9) {
         damagePlayer(); hit = true;
       }
     }
