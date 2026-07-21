@@ -603,7 +603,7 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
 });
-canvas.addEventListener('click', () => { if (!locked) canvas.requestPointerLock(); });
+canvas.addEventListener('click', () => { if (!locked && !susMeeting) canvas.requestPointerLock(); });
 canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpMode) pvpPlayerAttack(); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
