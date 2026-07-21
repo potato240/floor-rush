@@ -558,12 +558,14 @@ function buildMap() {
     }
   }
 
-  // Ceiling lights
-  for (let r = 1; r < rows-1; r += 3) {
-    for (let col = 1; col < cols-1; col += 3) {
+  // Ceiling lights — step and range scale with map size so light count stays ~constant
+  const lightStep = infectionMode ? 15 : 3;
+  const lightDist = infectionMode ? 70 : 14;
+  for (let r = 1; r < rows-1; r += lightStep) {
+    for (let col = 1; col < cols-1; col += lightStep) {
       if (g[r][col] === 0) {
         const wx = col*TILE+TILE/2, wz = r*TILE+TILE/2;
-        const pl = new THREE.PointLight(c.light, 1.4, 14);
+        const pl = new THREE.PointLight(c.light, 1.4, lightDist);
         pl.position.set(wx, WALL_H-0.1, wz);
         pl.castShadow = false;
         scene.add(pl);
