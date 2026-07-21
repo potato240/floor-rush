@@ -445,7 +445,7 @@ function loadMap(mapKey) {
   if (scene) scene.clear();
   scene = new THREE.Scene();
 
-  mapDef = infectionMode ? scaleMapDef(MAPS[mapKey], 5) : MAPS[mapKey];
+  mapDef = MAPS[mapKey];
   _openCells = null;
   currentGrid = null;
   panels = [];
