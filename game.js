@@ -2073,20 +2073,39 @@ function updateCutscene(dt) {
   const mesh = csScene && csScene.userData.char;
   if (!mesh) return;
 
-  const tremble = t < 0.25 ? 0 : t < 0.6 ? (t - 0.25) / 0.35 : t < 0.85 ? 1 - (t - 0.6) / 0.25 : 0;
-  mesh.position.x = tremble * Math.sin(csTime * 42) * 0.045;
-  mesh.position.y = tremble * Math.abs(Math.sin(csTime * 36) * 0.03);
-  mesh.rotation.z = tremble * Math.sin(csTime * 30) * 0.045;
+  const isDeath = csScene && csScene.userData.csType === 'death';
 
-  const infect = Math.max(0, Math.min(1, (t - 0.35) / 0.5));
-  const green = new THREE.Color(0x33bb44);
-  for (const { mat, orig } of csMats) {
-    mat.color.lerpColors(orig, green, infect);
-    if (mat.emissive) mat.emissive.setHex(infect > 0.4 ? 0x114422 : 0x000000);
+  if (isDeath) {
+    // Character collapses and turns dark red
+    const fallStart = 0.3;
+    const fall = Math.max(0, Math.min(1, (t - fallStart) / 0.5));
+    mesh.rotation.z = fall * -Math.PI / 2;
+    mesh.position.y = fall * -0.4;
+    mesh.position.x = Math.sin(csTime * 28) * (1 - fall) * 0.03;
+
+    const dark = new THREE.Color(0x330000);
+    for (const { mat, orig } of csMats) {
+      mat.color.lerpColors(orig, dark, Math.min(1, t * 1.4));
+      if (mat.emissive) mat.emissive.setHex(t < 0.4 ? 0x220000 : 0x000000);
+    }
+    if (csGreenLight) csGreenLight.intensity = (1 - t) * 1.5;
+    csCamera.position.z = 2.6 + fall * 0.8;
+  } else {
+    const tremble = t < 0.25 ? 0 : t < 0.6 ? (t - 0.25) / 0.35 : t < 0.85 ? 1 - (t - 0.6) / 0.25 : 0;
+    mesh.position.x = tremble * Math.sin(csTime * 42) * 0.045;
+    mesh.position.y = tremble * Math.abs(Math.sin(csTime * 36) * 0.03);
+    mesh.rotation.z = tremble * Math.sin(csTime * 30) * 0.045;
+
+    const infect = Math.max(0, Math.min(1, (t - 0.35) / 0.5));
+    const green = new THREE.Color(0x33bb44);
+    for (const { mat, orig } of csMats) {
+      mat.color.lerpColors(orig, green, infect);
+      if (mat.emissive) mat.emissive.setHex(infect > 0.4 ? 0x114422 : 0x000000);
+    }
+    if (csGreenLight) csGreenLight.intensity = infect * 2.0;
+    csCamera.position.z = 2.6 - t * 0.2 + (t > 0.82 ? (t - 0.82) * 3 : 0);
   }
-  if (csGreenLight) csGreenLight.intensity = infect * 2.0;
 
-  csCamera.position.z = 2.6 - t * 0.2 + (t > 0.82 ? (t - 0.82) * 3 : 0);
   csCamera.lookAt(0, 0.7, 0);
 
   if (csTime >= CS_DUR) {
@@ -2194,7 +2213,7 @@ function infectEntity(entity, isFirst = false) {
     playerInfectLockout = 15;
     tintInfected(player.mesh);
     if (activeMinigame) cancelMinigame();
-    if (isFirst) showInfectCutscene();
+    if (isFirst || !csActive) showInfectCutscene();
     else doFlash(0x00ff44, 0.7);
   } else {
     if (entity.infected) return;
@@ -2505,6 +2524,74 @@ function initSus() {
   updateSusHUD();
 }
 
+function susKillPlayer(killer = null) {
+  if (player.dead) return;
+  player.dead = true;
+  player.mesh.visible = false;
+  const head = makeDeadHead(chosenColor);
+  head.position.copy(player.pos).setY(0.5);
+  scene.add(head);
+  deadHeads.push({ grp: head, carriedBy: null, killedBy: null });
+  startSusDeathCutscene(killer ? killer.color : null);
+  checkSusWin();
+  updateSusHUD();
+  updateCrewDots();
+}
+
+function startSusDeathCutscene(killerColor) {
+  // Reuse 3D cutscene infrastructure with red death theme
+  csScene = new THREE.Scene();
+  csScene.background = new THREE.Color(0x080000);
+  csScene.add(new THREE.AmbientLight(0x441111, 1.0));
+  const key = new THREE.PointLight(0xff2200, 2.5, 10);
+  key.position.set(1.5, 3, 2);
+  csScene.add(key);
+  csGreenLight = new THREE.PointLight(0xff0000, 0, 8);
+  csGreenLight.position.set(-1, 2, 1);
+  csScene.add(csGreenLight);
+
+  const mesh = makeCrewmate(chosenColor, chosenHat);
+  mesh.position.set(0, 0, 0);
+  csScene.userData.char = mesh;
+  csScene.userData.csType = 'death';
+  csScene.add(mesh);
+
+  csMats = [];
+  mesh.traverse(child => {
+    if (child.isMesh && child.material && child.material.color &&
+        !(child.material instanceof THREE.MeshBasicMaterial)) {
+      const m = child.material.clone();
+      child.material = m;
+      csMats.push({ mat: m, orig: m.color.clone() });
+    }
+  });
+
+  csCamera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 50);
+  csCamera.position.set(0, 0.8, 2.6);
+  csCamera.lookAt(0, 0.7, 0);
+  csActive = true;
+  csTime = 0;
+
+  const el = document.getElementById('sus-death-cs');
+  if (el) {
+    const byEl = document.getElementById('sus-death-by');
+    if (byEl) {
+      if (killerColor != null) {
+        const hex = '#' + killerColor.toString(16).padStart(6, '0');
+        byEl.innerHTML = `killed by <span style="color:${hex}">${colorNameOf(killerColor)}</span>`;
+      } else {
+        byEl.textContent = '';
+      }
+    }
+    el.style.display = 'none';
+    setTimeout(() => {
+      el.style.display = 'flex';
+      el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    }, 600);
+    setTimeout(() => { el.style.display = 'none'; }, 3400);
+  }
+}
+
 function susKillNPC(npc, killer = null) {
   npc.dead = true;
   npc.mesh.visible = false;
@@ -2629,11 +2716,25 @@ function updateSus(dt) {
       }
     }
   }
-  // NPC impostors kill lone crewmates
+  // NPC impostors kill lone crewmates (and the player)
   for (const npc of npcs) {
     if (!npc.isImp || npc.dead) continue;
     npc.killCd = Math.max(0, (npc.killCd || 0) - dt);
     if (npc.killCd > 0) continue;
+
+    // Try to kill the player first if they're in range and unwitnessed
+    if (!player.dead && !playerIsImp) {
+      if (npc.mesh.position.distanceTo(player.pos) <= SUS_KILL_RANGE) {
+        const crewWitness = npcs.some(n => !n.isImp && !n.dead &&
+          n.mesh.position.distanceTo(npc.mesh.position) < SUS_WITNESS_RANGE);
+        if (!crewWitness) {
+          susKillPlayer(npc);
+          npc.killCd = SUS_IMP_KILL_CD;
+          continue;
+        }
+      }
+    }
+
     for (const target of npcs) {
       if (target.isImp || target.dead) continue;
       if (npc.mesh.position.distanceTo(target.mesh.position) > SUS_KILL_RANGE) continue;
@@ -2647,6 +2748,28 @@ function updateSus(dt) {
       }
     }
   }
+
+  // NPC crewmates report dead bodies they walk near
+  if (!susMeeting && !susOver) {
+    for (const npc of npcs) {
+      if (npc.isImp || npc.dead) continue;
+      for (const dh of deadHeads) {
+        if (dh.carriedBy) continue;
+        const d = Math.hypot(
+          npc.mesh.position.x - dh.grp.position.x,
+          npc.mesh.position.z - dh.grp.position.z
+        );
+        if (d < 2.5) {
+          showMessage(`${colorNameOf(npc.color).toUpperCase()} REPORTED A BODY!`, 2000);
+          doFlash(0xff8800, 0.5);
+          startMeeting();
+          break;
+        }
+      }
+      if (susMeeting) break;
+    }
+  }
+
   updateSusHUD();
 }
 
