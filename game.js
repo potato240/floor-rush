@@ -25,6 +25,15 @@ const MUMMY_FORGET   = 30;
 const TRAP_DMG_CD    = 3.0;
 const LADDER_CD      = 2.0;
 
+// ─── PVP constants ────────────────────────────────────────────────────────────
+const PVP_AI_SPEED     = 3.4;
+const PVP_BULLET_SPEED = 20;
+const PVP_PISTOL_AMMO  = 8;
+const PVP_SHOOT_CD     = 1.0;
+const PVP_MELEE_RANGE  = 1.7;
+const PVP_MELEE_CD     = 0.75;
+const PVP_PISTOL_RANGE = 15;
+
 // ─── Among Us colours ─────────────────────────────────────────────────────────
 const AU_COLORS = [
   { name:'Red',     hex:0xc51111 },
@@ -273,6 +282,8 @@ const messageEl     = document.getElementById('message');
 const flashEl       = document.getElementById('flash');
 const carryHint     = document.getElementById('carry-hint');
 const spSegs        = [0,1,2].map(i => document.getElementById(`sp-${i}`));
+const pvpWeaponEl   = document.getElementById('pvp-weapon');
+const pvpTeamsEl    = document.getElementById('pvp-teams');
 
 // ─── Player choices ───────────────────────────────────────────────────────────
 let chosenColor = AU_COLORS[0].hex;
@@ -340,6 +351,12 @@ let lookTarget = null;
 let raf, clock = new THREE.Clock();
 let _openCells = null;
 
+// ─── PVP state ────────────────────────────────────────────────────────────────
+let pvpMode = false;
+let pvpBlue = [], pvpRed = [];
+let wPickups = [], bullets = [];
+let pvpOver = false;
+
 // ─── Input ────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -364,9 +381,18 @@ document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
 });
 canvas.addEventListener('click', () => { if (!locked) canvas.requestPointerLock(); });
+canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpMode) pvpPlayerAttack(); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
 playBtn.addEventListener('click', () => {
+  pvpMode = document.querySelector('.mode-btn.active')?.dataset.mode === 'pvp';
   overlay.style.display = 'none';
   startGame(mapPicker.value);
   canvas.requestPointerLock();
@@ -407,13 +433,20 @@ function loadMap(mapKey) {
   scene.background = new THREE.Color(bgColor);
   scene.fog = new THREE.Fog(bgColor, 16, 50);
 
+  pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
   buildMap();
   spawnPlayer();
-  spawnNPCs();
-  spawnEnemies();
-  spawnMummies();
-  updateHUD();
-  updateCrewDots();
+  if (pvpMode) {
+    initPVP();
+  } else {
+    spawnNPCs();
+    spawnEnemies();
+    spawnMummies();
+    updateHUD();
+    updateCrewDots();
+  }
+  document.getElementById('panel-bar').style.display = pvpMode ? 'none' : '';
+  document.getElementById('pvp-hud').style.display   = pvpMode ? 'flex' : 'none';
   floorLabel.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
 
   clock.start();
@@ -586,7 +619,7 @@ function buildMap() {
     s => Math.hypot(s.wx - elevatorPos.x, s.wz - elevatorPos.z) > TILE
   );
   shuffle(sides);
-  sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
+  if (!pvpMode) sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
 
   // ── Ladders ──────────────────────────────────────────────────────────────────
   ladderPairs = [];
@@ -804,7 +837,7 @@ function spawnPlayer() {
   const wx = sp.x*TILE+TILE/2, wz = sp.z*TILE+TILE/2;
   player.pos.set(wx, 0, wz);
   player.angle = 0;
-  player.hp = 3; player.stamina = 100; player.dead = false; player.damageCooldown = 0; player.carrying = null;
+  player.hp = 3; player.stamina = 100; player.dead = false; player.damageCooldown = 0; player.carrying = null; player.weapon = null;
 
   if (player.mesh) scene.remove(player.mesh);
   player.mesh = makeCrewmate(chosenColor, chosenHat);
@@ -1233,6 +1266,22 @@ function updatePlayer(dt) {
         player.pos.copy(pair.toPos); pair.cooldown = LADDER_CD; break;
       } else if (player.pos.distanceTo(pair.toPos) < 0.9) {
         player.pos.copy(pair.fromPos); pair.cooldown = LADDER_CD; break;
+      }
+    }
+  }
+
+  // ── PVP weapon auto-pickup + cooldown ──
+  if (pvpMode) {
+    if (player.weapon) player.weapon.cd = Math.max(0, player.weapon.cd - dt);
+    else {
+      for (let i = wPickups.length - 1; i >= 0; i--) {
+        if (player.pos.distanceTo(wPickups[i].mesh.position) < 1.3) {
+          const wp = wPickups.splice(i, 1)[0];
+          player.weapon = { type: wp.type, ammo: wp.type === 'pistol' ? PVP_PISTOL_AMMO : Infinity, cd: 0 };
+          scene.remove(wp.mesh);
+          showMessage(wp.type === 'pistol' ? `PISTOL ×${PVP_PISTOL_AMMO}` : 'MELEE WEAPON', 1500);
+          updateWeaponHUD(); break;
+        }
       }
     }
   }
@@ -1666,13 +1715,244 @@ function loop() {
       updatePlayer(dt);
       checkLookTarget();
     }
-    updateNPCs(dt);
-    updateEnemies(dt);
-    updateMummies(dt);
-    checkElevatorFill();
+    if (pvpMode) {
+      updatePVP(dt);
+    } else {
+      updateNPCs(dt);
+      updateEnemies(dt);
+      updateMummies(dt);
+      checkElevatorFill();
+    }
     renderer.render(scene, camera);
   } catch(e) {
     console.error('Loop error:', e);
+  }
+}
+
+// ─── PVP ──────────────────────────────────────────────────────────────────────
+function makeWeaponMesh(type) {
+  const grp = new THREE.Group();
+  if (type === 'pistol') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.18,0.12,0.35),
+      new THREE.MeshLambertMaterial({color:0xddbb00}));
+    body.position.y = 0.06;
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.25,6),
+      new THREE.MeshLambertMaterial({color:0x888888}));
+    barrel.rotation.x = Math.PI/2; barrel.position.set(0,0.06,0.28);
+    grp.add(body, barrel);
+    grp.add(new THREE.PointLight(0xffdd00,0.8,2));
+  } else {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.45,7),
+      new THREE.MeshLambertMaterial({color:0x7b3f0e}));
+    const club = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.07,0.25,7),
+      new THREE.MeshLambertMaterial({color:0xb05a20}));
+    club.position.y = 0.35; grp.add(handle, club);
+    grp.add(new THREE.PointLight(0xff8800,0.8,2));
+  }
+  return grp;
+}
+
+function fireBullet(pos, dir, team) {
+  const col = team === 'blue' ? 0x44aaff : 0xff2200;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.09,5,4),
+    new THREE.MeshBasicMaterial({color:col}));
+  const light = new THREE.PointLight(col,1.5,3);
+  mesh.add(light); mesh.position.copy(pos); scene.add(mesh);
+  bullets.push({ mesh, vel: dir.clone().multiplyScalar(PVP_BULLET_SPEED), team, ttl:1.4 });
+}
+
+function damagePVPFighter(f) {
+  if (f.dead || f.damageCooldown > 0) return;
+  f.hp--; f.damageCooldown = 0.5;
+  if (f.hp <= 0) {
+    f.dead = true;
+    const dh = makeDeadHead(f.color);
+    dh.position.copy(f.mesh.position); dh.position.y = 0.4;
+    scene.add(dh); f.mesh.visible = false;
+    updatePVPTeamHUD(); checkPVPWin();
+  }
+}
+
+function spawnPVPWeapons() {
+  const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
+  const open = getOpenCells().filter(c =>
+    Math.hypot(c.wx-spX, c.wz-spZ) > TILE*2 &&
+    !trapCells.some(t => Math.hypot(c.wx-t.pos.x, c.wz-t.pos.z) < TILE)
+  );
+  shuffle(open);
+  const types = ['pistol','pistol','pistol','pistol','pistol','pistol',
+                  'melee','melee','melee','melee','melee','melee'];
+  for (let i = 0; i < Math.min(types.length, open.length); i++) {
+    const mesh = makeWeaponMesh(types[i]);
+    mesh.position.set(open[i].wx, 0.25, open[i].wz);
+    scene.add(mesh);
+    wPickups.push({ mesh, type: types[i] });
+  }
+}
+
+function initPVP() {
+  const spX = mapDef.spawn.x*TILE+TILE/2, spZ = mapDef.spawn.z*TILE+TILE/2;
+  const open = getOpenCells().filter(c => Math.hypot(c.wx-spX,c.wz-spZ) > TILE);
+  shuffle(open);
+  for (let i = 0; i < 4 && i < open.length; i++) {
+    const mesh = makeCrewmate(chosenColor, 'none');
+    mesh.position.set(open[i].wx, 0, open[i].wz); scene.add(mesh);
+    pvpBlue.push({ mesh, team:'blue', color:chosenColor,
+      hp:3, dead:false, damageCooldown:0, weapon:null, path:[], pathStep:0, pathTimer:0 });
+  }
+  for (let i = 4; i < 9 && i < open.length; i++) {
+    const mesh = makeCrewmate(0xc51111, 'none');
+    mesh.position.set(open[i].wx, 0, open[i].wz); scene.add(mesh);
+    pvpRed.push({ mesh, team:'red', color:0xc51111,
+      hp:3, dead:false, damageCooldown:0, weapon:null, path:[], pathStep:0, pathTimer:0 });
+  }
+  spawnPVPWeapons();
+  updateWeaponHUD(); updatePVPTeamHUD();
+}
+
+function pvpPathTo(f, x, z, dt) {
+  f.pathTimer = (f.pathTimer||0) - dt;
+  if (f.pathTimer <= 0 || f.path.length === 0) {
+    npcComputePath(f, x, z);
+    f.pathTimer = 0.8 + Math.random()*0.4;
+  }
+  npcFollowPath(f, dt, 0, PVP_AI_SPEED);
+}
+
+function updatePVPFighter(f, dt) {
+  if (f.dead) return;
+  f.damageCooldown = Math.max(0, f.damageCooldown - dt);
+  if (f.weapon) f.weapon.cd = Math.max(0, f.weapon.cd - dt);
+
+  const enemyList = f.team === 'blue' ? pvpRed : pvpBlue;
+  let nearTarget = null, nearDist = Infinity, targetPlayer = false;
+  for (const e of enemyList) {
+    if (e.dead) continue;
+    const d = f.mesh.position.distanceTo(e.mesh.position);
+    if (d < nearDist) { nearDist = d; nearTarget = e; }
+  }
+  if (f.team === 'red' && !player.dead) {
+    const d = f.mesh.position.distanceTo(player.pos);
+    if (d < nearDist) { nearDist = d; nearTarget = null; targetPlayer = true; }
+  }
+  const nearPos = targetPlayer ? player.pos : (nearTarget ? nearTarget.mesh.position : null);
+
+  if (!f.weapon) {
+    if (wPickups.length > 0) {
+      let best = null, bestD = Infinity;
+      for (const wp of wPickups) {
+        const d = f.mesh.position.distanceTo(wp.mesh.position);
+        if (d < bestD) { bestD = d; best = wp; }
+      }
+      if (bestD < 1.3) {
+        f.weapon = { type: best.type, ammo: best.type === 'pistol' ? PVP_PISTOL_AMMO : Infinity, cd: 0 };
+        scene.remove(best.mesh); wPickups.splice(wPickups.indexOf(best), 1);
+      } else { pvpPathTo(f, best.mesh.position.x, best.mesh.position.z, dt); }
+    } else if (nearPos) { pvpPathTo(f, nearPos.x, nearPos.z, dt); }
+    return;
+  }
+
+  if (!nearPos) return;
+
+  if (f.weapon.type === 'pistol') {
+    if (f.weapon.ammo <= 0) { f.weapon = null; return; }
+    if (nearDist <= PVP_PISTOL_RANGE && f.weapon.cd <= 0) {
+      const dir = new THREE.Vector3().subVectors(nearPos, f.mesh.position).setY(0).normalize();
+      fireBullet(f.mesh.position.clone().setY(0.8), dir, f.team);
+      f.weapon.ammo--; f.weapon.cd = PVP_SHOOT_CD;
+      f.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+    } else if (nearDist > PVP_PISTOL_RANGE * 0.6) {
+      pvpPathTo(f, nearPos.x, nearPos.z, dt);
+    }
+  } else {
+    if (nearDist < PVP_MELEE_RANGE && f.weapon.cd <= 0) {
+      if (nearTarget) damagePVPFighter(nearTarget);
+      else damagePlayer();
+      f.weapon.cd = PVP_MELEE_CD;
+    } else { pvpPathTo(f, nearPos.x, nearPos.z, dt); }
+  }
+}
+
+function pvpPlayerAttack() {
+  if (!pvpMode || player.dead || !player.weapon || player.weapon.cd > 0) return;
+  if (player.weapon.type === 'pistol') {
+    if (player.weapon.ammo <= 0) { showMessage('EMPTY!', 800); return; }
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
+    fireBullet(player.pos.clone().setY(0.8), dir, 'blue');
+    player.weapon.ammo--; player.weapon.cd = PVP_SHOOT_CD;
+  } else {
+    let hit = false;
+    for (const f of pvpRed) {
+      if (!f.dead && player.pos.distanceTo(f.mesh.position) < PVP_MELEE_RANGE) {
+        damagePVPFighter(f); hit = true;
+      }
+    }
+    if (!hit) showMessage('MISS', 600);
+    player.weapon.cd = PVP_MELEE_CD;
+  }
+  updateWeaponHUD();
+}
+
+function updatePVP(dt) {
+  for (const wp of wPickups) wp.mesh.rotation.y += dt * 1.5;
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.ttl -= dt; b.mesh.position.addScaledVector(b.vel, dt);
+    let hit = b.ttl <= 0 || blocked(b.mesh.position.x, b.mesh.position.z, 0.12);
+    if (!hit) {
+      const targets = b.team === 'blue' ? pvpRed : pvpBlue;
+      for (const t of targets) {
+        if (!t.dead && b.mesh.position.distanceTo(t.mesh.position) < 0.6) {
+          damagePVPFighter(t); hit = true; break;
+        }
+      }
+      if (!hit && b.team === 'red' && !player.dead &&
+          b.mesh.position.distanceTo(player.pos) < 0.6) {
+        damagePlayer(); hit = true;
+      }
+    }
+    if (hit) { scene.remove(b.mesh); bullets.splice(i, 1); }
+  }
+
+  for (const f of pvpBlue) updatePVPFighter(f, dt);
+  for (const f of pvpRed)  updatePVPFighter(f, dt);
+
+  for (const trap of trapCells) {
+    trap.cooldown = Math.max(0, trap.cooldown - dt);
+    if (trap.cooldown > 0) continue;
+    for (const f of [...pvpBlue, ...pvpRed]) {
+      if (!f.dead && Math.hypot(f.mesh.position.x-trap.pos.x, f.mesh.position.z-trap.pos.z) < TILE*0.38) {
+        damagePVPFighter(f); trap.cooldown = TRAP_DMG_CD; break;
+      }
+    }
+  }
+
+  updateWeaponHUD(); updatePVPTeamHUD();
+}
+
+function updateWeaponHUD() {
+  if (!pvpWeaponEl) return;
+  if (!player.weapon) pvpWeaponEl.textContent = '— no weapon —';
+  else if (player.weapon.type === 'pistol') pvpWeaponEl.textContent = `PISTOL  ×${player.weapon.ammo}`;
+  else pvpWeaponEl.textContent = 'MELEE';
+}
+
+function updatePVPTeamHUD() {
+  if (!pvpTeamsEl) return;
+  const bAlive = pvpBlue.filter(f=>!f.dead).length + (player.dead ? 0 : 1);
+  const rAlive = pvpRed.filter(f=>!f.dead).length;
+  pvpTeamsEl.innerHTML =
+    `<span style="color:#44aaff">BLUE ${bAlive}</span>  vs  <span style="color:#ff4444">RED ${rAlive}</span>`;
+}
+
+function checkPVPWin() {
+  if (pvpOver) return;
+  if (pvpRed.every(f=>f.dead)) {
+    pvpOver = true; showMessage('BLUE TEAM WINS!', 5000);
+  } else if (pvpBlue.every(f=>f.dead) && player.dead) {
+    pvpOver = true; showMessage('RED TEAM WINS!', 5000);
   }
 }
 

@@ -146,6 +146,25 @@
     .sp-seg.depleted { background:#333; }
     .sp-seg.lost     { background:#991111; }
 
+    /* PVP HUD */
+    #pvp-hud {
+      position:absolute; top:18px; right:18px;
+      display:none; flex-direction:column; gap:5px; align-items:flex-end;
+      text-align:right;
+    }
+    #pvp-teams { font-size:17px; font-weight:bold; letter-spacing:1px; }
+    #pvp-weapon { font-size:13px; color:#ffcc00; letter-spacing:1px; }
+
+    /* Mode selector */
+    #mode-grid { display:flex; gap:8px; }
+    .mode-btn {
+      background:#1a1a1a; border:2px solid #333; border-radius:8px;
+      cursor:pointer; padding:9px 18px; font-size:13px; color:#aaa;
+      transition:border-color .1s, color .1s, background .1s;
+    }
+    .mode-btn:hover  { border-color:#00ffcc; color:#fff; }
+    .mode-btn.active { border-color:#00ffcc; color:#00ffcc; background:#0a2020; }
+
     /* Carrying indicator */
     #carry-hint {
       position:absolute; top:60%; left:50%; transform:translateX(-50%);
@@ -171,6 +190,10 @@
   </div>
   <div id="message"></div>
   <div id="carry-hint">Carrying a head — get to the elevator!</div>
+  <div id="pvp-hud">
+    <div id="pvp-teams"></div>
+    <div id="pvp-weapon"></div>
+  </div>
   <div id="stamina-bar">
     <div id="stamina-label">SPRINT</div>
     <div id="stamina-segs">
@@ -195,6 +218,13 @@
     <div class="creator-section">
       <h3>Hat</h3>
       <div id="hat-grid"></div>
+    </div>
+    <div class="creator-section">
+      <h3>Mode</h3>
+      <div id="mode-grid">
+        <button class="mode-btn active" data-mode="normal">Normal</button>
+        <button class="mode-btn" data-mode="pvp">PVP</button>
+      </div>
     </div>
     <div class="creator-section">
       <h3>Map</h3>
