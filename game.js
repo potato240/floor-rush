@@ -2944,6 +2944,9 @@ function startMeeting() {
   susMeeting = { phase:'voting', timer:15, votes:{}, playerVoted:false, ejected:null };
   susMeeting.entities = meetingEntities().filter(e => !e.dead);
 
+  for (const dh of deadHeads) scene.remove(dh.grp);
+  deadHeads = [];
+
   renderMeetingUI();
   document.getElementById('meeting-ui').style.display = 'flex';
   document.exitPointerLock();
