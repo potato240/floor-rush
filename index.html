@@ -164,6 +164,31 @@
     }
     .mode-label input[type="radio"] { accent-color:#00ffcc; width:17px; height:17px; cursor:pointer; }
 
+    /* Infection cutscene */
+    @keyframes infectIn {
+      0%   { opacity:0; transform:scale(1.4); }
+      15%  { opacity:1; transform:scale(1); }
+      75%  { opacity:1; transform:scale(1); }
+      100% { opacity:0; transform:scale(0.9); }
+    }
+    @keyframes infectPulse {
+      0%,100% { box-shadow: inset 0 0 80px 40px rgba(0,255,60,0); }
+      40%     { box-shadow: inset 0 0 80px 40px rgba(0,255,60,0.45); }
+    }
+    #infect-cutscene {
+      position:fixed; inset:0; z-index:95;
+      display:none; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.72);
+      animation: infectPulse 3.2s ease-in-out;
+      pointer-events:none;
+    }
+    #infect-cs-text {
+      font-size:52px; font-weight:900; letter-spacing:6px;
+      text-align:center; color:#fff; line-height:1.2;
+      animation: infectIn 3.2s ease forwards;
+    }
+    #infect-cs-text span { color:#33ff66; text-shadow:0 0 40px #33ff66; }
+
     /* Infection HUD */
     #infect-hud {
       position:absolute; top:60px; left:50%; transform:translateX(-50%);
@@ -221,6 +246,9 @@
   <div id="pvp-hud">
     <div id="pvp-teams"></div>
     <div id="pvp-weapon"></div>
+  </div>
+  <div id="infect-cutscene">
+    <div id="infect-cs-text">YOU ARE<br><span>INFECTED</span></div>
   </div>
   <div id="infect-hud">
     <div id="infect-count"></div>

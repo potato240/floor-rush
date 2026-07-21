@@ -361,10 +361,11 @@ let pvpOver = false;
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
 const INFECT_NPC_SPEED  = NPC_SPEED * 0.5;
-let infectionMode   = false;
-let playerInfected  = false;
-let activeMinigame  = null;
-let infectionOver   = false;
+let infectionMode      = false;
+let playerInfected     = false;
+let playerInfectLockout = 0;
+let activeMinigame     = null;
+let infectionOver      = false;
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
@@ -467,7 +468,7 @@ function loadMap(mapKey) {
   scene.fog = new THREE.Fog(bgColor, 16, 50);
 
   pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
-  playerInfected = false; activeMinigame = null; infectionOver = false;
+  playerInfected = false; playerInfectLockout = 0; activeMinigame = null; infectionOver = false;
   buildMap();
   spawnPlayer();
   if (pvpMode) {
@@ -1797,17 +1798,29 @@ function infectEntity(entity) {
   if (entity === 'player') {
     if (playerInfected) return;
     playerInfected = true;
+    playerInfectLockout = 15;
     tintInfected(player.mesh);
     if (activeMinigame) cancelMinigame();
-    showMessage('YOU ARE INFECTED!', 3000);
-    doFlash(0x00ff44, 0.7);
+    showInfectCutscene();
   } else {
     if (entity.infected) return;
     entity.infected = true;
+    entity.infectLockout = 15;
     tintInfected(entity.mesh);
   }
   updateInfectionHUD();
   checkInfectionEnd();
+}
+
+function showInfectCutscene() {
+  const el = document.getElementById('infect-cutscene');
+  if (!el) return;
+  el.style.display = 'flex';
+  el.style.animation = 'none';
+  void el.offsetWidth; // reflow to restart animation
+  el.style.animation = '';
+  setTimeout(() => { el.style.display = 'none'; }, 3200);
+  doFlash(0x00ff44, 0.9);
 }
 
 function initInfection() {
@@ -1836,6 +1849,7 @@ function checkInfectionEnd() {
 function updateInfection(dt) {
   if (infectionOver) return;
   updateMinigame(dt);
+  if (playerInfectLockout > 0) playerInfectLockout = Math.max(0, playerInfectLockout - dt);
 
   // Non-infected NPCs flee from nearest infected entity
   for (const npc of npcs) {
@@ -1865,6 +1879,7 @@ function updateInfection(dt) {
   for (const npc of npcs) {
     if (!npc.infected || npc.dead) continue;
     npc.damageCooldown = Math.max(0, (npc.damageCooldown || 0) - dt);
+    if (npc.infectLockout > 0) { npc.infectLockout -= dt; continue; }
 
     // Find nearest non-infected target
     let nearDist = Infinity, nearPos = null, nearEntity = null;
@@ -1892,8 +1907,8 @@ function updateInfection(dt) {
     }
   }
 
-  // Player infected → can spread by walking into others
-  if (playerInfected) {
+  // Player infected → can spread by walking into others (after lockout)
+  if (playerInfected && playerInfectLockout <= 0) {
     for (const npc of npcs) {
       if (!npc.infected && !npc.dead && player.pos.distanceTo(npc.mesh.position) < INFECT_RANGE)
         infectEntity(npc);
