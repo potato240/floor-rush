@@ -267,6 +267,48 @@ const MAPS = {
   },
 };
 
+// ─── Polus map (generated) ────────────────────────────────────────────────────
+{
+  const R=34,C=52;
+  const g=Array.from({length:R},()=>new Array(C).fill(1));
+  const o=(r1,c1,r2,c2)=>{for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++)g[r][c]=0;};
+  o(1,19,7,31);   // Dropship
+  o(7,12,10,20);  // West corridor
+  o(9,19,12,28);  // Dropship south
+  o(7,30,10,38);  // East corridor
+  o(1,38,11,51);  // Laboratory
+  o(11,43,26,51); // Lab south corridor
+  o(11,1,17,9);   // Security
+  o(13,9,15,12);  // Security-Electrical connector
+  o(11,11,17,21); // Electrical
+  o(10,12,12,21); // West corridor connects to Electrical
+  o(11,22,12,27); // Electrical to Storage
+  o(11,27,19,37); // Storage
+  o(15,14,22,17); // Electrical to Communications corridor
+  o(21,11,27,23); // Communications
+  o(22,23,24,28); // Communications to Storage corridor
+  o(18,29,22,33); // Storage to Office corridor
+  o(20,27,29,43); // Office
+  o(21,43,26,45); // Office to Specimen corridor
+  o(26,44,33,51); // Specimen Room
+  o(29,39,33,44); // Decontamination
+  o(31,38,32,45); // Decon to Specimen connector
+  o(29,27,33,38); // Admin
+  o(20,1,25,9);   // O2 Upper
+  o(22,9,24,12);  // O2 to Communications
+  o(24,2,27,8);   // O2 vertical connector
+  o(26,1,31,9);   // O2 Lower
+  o(30,2,32,8);   // O2 Lower to Boiler
+  o(31,1,33,9);   // Boiler Room
+  o(26,14,29,17); // Communications to Weapons corridor
+  o(28,11,33,23); // Weapons
+  MAPS.polus2={
+    name:'POLUS',panelCount:14,
+    colors:{floor:0x3d4f60,ceiling:0x0d1520,wall:0x253545,trim:0x80cbc4,light:0x88c8e8},
+    grid:g,spawn:{x:25,z:3},elevator:{x:32,z:31},
+  };
+}
+
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 const canvas        = document.getElementById('canvas');
 const overlay       = document.getElementById('overlay');
@@ -358,6 +400,19 @@ let pvpBlue = [], pvpRed = [];
 let wPickups = [], bullets = [];
 let pvpOver = false;
 
+// ─── Sus (Among Us) state ─────────────────────────────────────────────────────
+const SUS_NPC_COUNT     = 14;
+const SUS_IMP_COUNT     = 3;
+const SUS_KILL_RANGE    = 1.8;
+const SUS_KILL_CD       = 25;
+const SUS_IMP_KILL_CD   = 20;
+const SUS_WITNESS_RANGE = 6;
+let susMode      = false;
+let playerIsImp  = false;
+let susOver      = false;
+let susKillCd    = 0;
+let susSabotage  = null;
+
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
 const INFECT_NPC_SPEED  = NPC_SPEED * 0.5;
@@ -376,6 +431,8 @@ document.addEventListener('keydown', e => {
   if (activeMinigame && activeMinigame.type === 'sequence' &&
       ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
     handleMinigameKey(e.code);
+  if (e.code === 'KeyK' && susMode && playerIsImp && locked) susPlayerKill();
+  if (e.code === 'Tab'  && susMode && playerIsImp && locked) { e.preventDefault(); susTriggerSabotage(); }
 });
 document.addEventListener('keyup', e => keys[e.code] = false);
 
@@ -402,8 +459,9 @@ playBtn.addEventListener('click', () => {
   const mode = document.querySelector('input[name="gamemode"]:checked')?.value || 'normal';
   pvpMode        = mode === 'pvp';
   infectionMode  = mode === 'infection';
+  susMode        = mode === 'sus';
   overlay.style.display = 'none';
-  startGame(mapPicker.value);
+  startGame(susMode ? 'polus2' : mapPicker.value);
   canvas.requestPointerLock();
 });
 
@@ -465,14 +523,20 @@ function loadMap(mapKey) {
 
   const bgColor = 0x0d0d14;
   scene.background = new THREE.Color(bgColor);
-  scene.fog = new THREE.Fog(bgColor, 16, 50);
+  scene.fog = new THREE.Fog(bgColor, susMode ? 3 : 16, susMode ? 10 : 50);
 
   pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
   playerInfected = false; playerInfectLockout = 0; activeMinigame = null; infectionOver = false;
+  susOver = false; susKillCd = 0; susSabotage = null; playerIsImp = false;
   buildMap();
   spawnPlayer();
   if (pvpMode) {
     initPVP();
+  } else if (susMode) {
+    spawnNPCs();
+    initSus();
+    updateHUD();
+    updateCrewDots();
   } else if (infectionMode) {
     spawnNPCs();
     initInfection();
@@ -488,6 +552,7 @@ function loadMap(mapKey) {
   document.getElementById('panel-bar').style.display   = pvpMode  ? 'none' : '';
   document.getElementById('pvp-hud').style.display     = pvpMode  ? 'flex' : 'none';
   document.getElementById('infect-hud').style.display  = infectionMode ? 'flex' : 'none';
+  document.getElementById('sus-hud').style.display     = susMode  ? 'flex' : 'none';
   document.getElementById('minigame-ui').style.display = 'none';
   floorLabel.textContent = `FLOOR ${floorNum} — ${mapDef.name}`;
 
@@ -898,7 +963,8 @@ function spawnNPCs() {
   const sp = mapDef.spawn;
   const bx = sp.x*TILE+TILE/2, bz = sp.z*TILE+TILE/2;
 
-  for (let i=0; i<NPC_COUNT; i++) {
+  const npcSpawnCount = susMode ? SUS_NPC_COUNT : NPC_COUNT;
+  for (let i=0; i<npcSpawnCount; i++) {
     const col = NPC_COLORS_POOL[i % NPC_COLORS_POOL.length];
     const hat = NPC_HATS[i % NPC_HATS.length];
     const mesh = makeCrewmate(col, hat);
@@ -1655,8 +1721,9 @@ function activatePanel(panel) {
   panel.userData.glow.color.setHex(0x00ff66);
   panel.userData.glow.intensity = 1.5;
   doFlash(0x00ff66, 0.25);
+  if (susMode && susSabotage) { susFixSabotage(); return; }
   updateHUD();
-  if (panelsActivated >= mapDef.panelCount) openElevator();
+  if (panelsActivated >= mapDef.panelCount) { if (susMode) checkSusWin(); else openElevator(); }
 }
 
 function openElevator() {
@@ -1850,6 +1917,10 @@ function loop() {
     }
     if (pvpMode) {
       updatePVP(dt);
+    } else if (susMode) {
+      updateNPCs(dt);
+      updateSus(dt);
+      checkElevatorFill();
     } else if (infectionMode) {
       updateNPCs(dt);
       updateInfection(dt);
@@ -2150,6 +2221,145 @@ function completeMinigame() {
 function cancelMinigame() {
   document.getElementById('minigame-ui').style.display = 'none';
   activeMinigame = null;
+}
+
+// ─── Sus (Among Us) mode ──────────────────────────────────────────────────────
+function initSus() {
+  const pool = [...npcs];
+  shuffle(pool);
+  for (let i = 0; i < SUS_IMP_COUNT; i++) {
+    pool[i].isImp = true;
+    pool[i].killCd = SUS_IMP_KILL_CD * (0.5 + Math.random());
+  }
+  playerIsImp = Math.random() < SUS_IMP_COUNT / (SUS_NPC_COUNT + 1);
+  if (playerIsImp) {
+    showMessage('YOU ARE AN\nIMPOSTOR', 5000);
+    doFlash(0xff0000, 0.8);
+  } else {
+    showMessage('YOU ARE A\nCREWMATE', 4000);
+    doFlash(0x0055ff, 0.5);
+  }
+  updateSusHUD();
+}
+
+function susKillNPC(npc) {
+  npc.dead = true;
+  npc.mesh.visible = false;
+  const head = makeDeadHead(npc.color);
+  head.position.copy(npc.mesh.position).setY(0.5);
+  scene.add(head);
+  deadHeads.push({ grp: head, carriedBy: null });
+  updateCrewDots();
+  checkSusWin();
+  updateSusHUD();
+}
+
+function susPlayerKill() {
+  if (!playerIsImp || susKillCd > 0 || player.dead || susOver) return;
+  let nearest = null, nearDist = SUS_KILL_RANGE;
+  for (const npc of npcs) {
+    if (npc.isImp || npc.dead) continue;
+    const d = player.pos.distanceTo(npc.mesh.position);
+    if (d < nearDist) { nearDist = d; nearest = npc; }
+  }
+  if (!nearest) { showMessage('NO TARGET', 600); return; }
+  susKillNPC(nearest);
+  susKillCd = SUS_KILL_CD;
+  doFlash(0xff0000, 0.6);
+}
+
+function susTriggerSabotage() {
+  if (susSabotage || susOver) return;
+  susSabotage = { timer: 45 };
+  scene.fog = new THREE.Fog(0x000000, 1, 4);
+  showMessage('LIGHTS SABOTAGED!\nFix at a panel [E]', 4000);
+  updateSusHUD();
+}
+
+function susFixSabotage() {
+  susSabotage = null;
+  scene.fog = new THREE.Fog(0x0d0d14, 3, 10);
+  showMessage('LIGHTS RESTORED!', 2000);
+  updateSusHUD();
+}
+
+function checkSusWin() {
+  if (susOver) return;
+  const liveImps = npcs.filter(n => n.isImp && !n.dead).length + (playerIsImp && !player.dead ? 1 : 0);
+  const liveCrew = npcs.filter(n => !n.isImp && !n.dead).length + (!playerIsImp && !player.dead ? 1 : 0);
+  if (liveImps === 0) {
+    susOver = true;
+    showMessage('ALL IMPOSTORS FOUND\nCREWMATES WIN!', 6000);
+    doFlash(0x0055ff, 0.8); openElevator();
+  } else if (liveImps >= liveCrew) {
+    susOver = true;
+    showMessage('IMPOSTORS WIN!', 6000);
+    doFlash(0xff0000, 0.8);
+  } else if (panelsActivated >= mapDef.panelCount) {
+    susOver = true;
+    showMessage('ALL TASKS DONE\nCREWMATES WIN!', 6000);
+    doFlash(0x0055ff, 0.8); openElevator();
+  }
+}
+
+function updateSusHUD() {
+  const hud = document.getElementById('sus-hud');
+  if (!hud) return;
+  const liveImps = npcs.filter(n => n.isImp && !n.dead).length + (playerIsImp && !player.dead ? 1 : 0);
+  const liveCrew = npcs.filter(n => !n.isImp && !n.dead).length + (!playerIsImp && !player.dead ? 1 : 0);
+  const roleEl = document.getElementById('sus-role');
+  roleEl.textContent = playerIsImp ? '⚠ IMPOSTOR' : '✓ CREWMATE';
+  roleEl.style.color  = playerIsImp ? '#ff4444' : '#44ff88';
+  document.getElementById('sus-counts').textContent = `Crew ${liveCrew}  ·  Imps ${liveImps}`;
+  const killEl = document.getElementById('sus-kill-info');
+  if (playerIsImp) {
+    killEl.style.display = '';
+    if (susKillCd > 0) { killEl.textContent = `[K] KILL — ${Math.ceil(susKillCd)}s`; killEl.style.color = '#888'; }
+    else { killEl.textContent = '[K] KILL — READY'; killEl.style.color = '#ff4444'; }
+    const sabEl = document.getElementById('sus-sab-info');
+    if (susKillCd <= 0 && !susSabotage) { sabEl.textContent = '[Tab] LIGHTS'; sabEl.style.display = ''; }
+    else sabEl.style.display = 'none';
+  } else {
+    killEl.style.display = 'none';
+    document.getElementById('sus-sab-info').style.display = 'none';
+  }
+  const sabBar = document.getElementById('sus-sabotage-bar');
+  if (susSabotage) {
+    sabBar.style.display = '';
+    sabBar.innerHTML = `<span style="color:#ff8800">LIGHTS OUT — Fix at panel! ${Math.ceil(susSabotage.timer)}s</span>`;
+  } else {
+    sabBar.style.display = 'none';
+  }
+}
+
+function updateSus(dt) {
+  if (susOver) return;
+  if (susKillCd > 0) susKillCd = Math.max(0, susKillCd - dt);
+  if (susSabotage) {
+    susSabotage.timer -= dt;
+    if (susSabotage.timer <= 0) {
+      susOver = true; showMessage('SABOTAGE FAILED — IMPOSTORS WIN!', 5000); doFlash(0xff0000, 0.9);
+    }
+  }
+  // NPC impostors kill lone crewmates
+  for (const npc of npcs) {
+    if (!npc.isImp || npc.dead) continue;
+    npc.killCd = Math.max(0, (npc.killCd || 0) - dt);
+    if (npc.killCd > 0) continue;
+    for (const target of npcs) {
+      if (target.isImp || target.dead) continue;
+      if (npc.mesh.position.distanceTo(target.mesh.position) > SUS_KILL_RANGE) continue;
+      const playerWitness = !player.dead && player.pos.distanceTo(npc.mesh.position) < SUS_WITNESS_RANGE;
+      const crewWitness = npcs.some(n => !n.isImp && !n.dead && n !== target &&
+        n.mesh.position.distanceTo(npc.mesh.position) < SUS_WITNESS_RANGE);
+      if (!playerWitness && !crewWitness) {
+        susKillNPC(target);
+        npc.killCd = SUS_IMP_KILL_CD;
+        break;
+      }
+    }
+  }
+  updateSusHUD();
 }
 
 // ─── PVP ──────────────────────────────────────────────────────────────────────
