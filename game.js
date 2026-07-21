@@ -2082,27 +2082,34 @@ function updateCutscene(dt) {
     attackerMesh.rotation.z = -lean * 0.22;
     attackerMesh.position.x = -1.3 + lean * 0.2;
 
-    // Phase 2 (0.25–0.65): tongue shoots out
+    // Phase 2 (0.25-0.65): tongue shoots out from attacker face to player face
     const tongueT = Math.max(0, Math.min(1, (t - 0.25) / 0.4));
-    const tongueLen = tongueT * 1.98; // attacker face (-0.99) to player face (+0.99)
-    tongueMesh.scale.x = tongueLen;
+    const maxLen = 1.98; // x=-0.99 (attacker face) to x=+0.99 (player face)
+    let curLen = Math.max(0.001, tongueT * maxLen);
 
-    // Phase 3 (0.65–1.0): player shakes and turns green
+    // Phase 3 (0.65-1.0): player shakes + turns green, tongue retracts
     const infectT = Math.max(0, Math.min(1, (t - 0.65) / 0.35));
-    const shake = infectT < 0.7 ? infectT * Math.sin(csTime * 45) * 0.06 : 0;
+    if (infectT > 0) curLen = Math.max(0.001, curLen * (1 - Math.min(1, infectT / 0.6)));
+
+    // Slide box center so left edge stays fixed at attacker face (x=-0.99)
+    tongueMesh.scale.x = curLen;
+    tongueMesh.position.x = -0.99 + curLen / 2;
+
+    const shake = infectT < 0.8 ? Math.sin(csTime * 45) * infectT * 0.07 : 0;
     playerMesh.position.x = 1.3 + shake;
-    playerMesh.rotation.z = infectT < 0.7 ? Math.sin(csTime * 38) * infectT * 0.04 : 0;
+    playerMesh.rotation.z = Math.sin(csTime * 38) * infectT * 0.05;
     const green = new THREE.Color(0x33bb44);
     for (const { mat, orig } of csMats) {
       mat.color.lerpColors(orig, green, infectT);
-      if (mat.emissive) mat.emissive.setHex(infectT > 0.4 ? 0x114422 : 0x000000);
+      if (mat.emissive) mat.emissive.setHex(infectT > 0.3 ? 0x114422 : 0x000000);
     }
 
-    // Retract tongue in phase 3
-    if (infectT > 0.3) tongueMesh.scale.x = Math.max(0, tongueLen * (1 - (infectT - 0.3) / 0.7));
+    // Camera zooms in as tongue shoots, pulls back at end
+    const zoomIn  = Math.min(1, tongueT * 1.6);
+    const zoomOut = Math.max(0, (infectT - 0.7) / 0.3);
+    csCamera.position.set(0, 1.1 - zoomIn * 0.2 + zoomOut * 0.15, 4.2 - zoomIn * 1.8 + zoomOut * 1.4);
+    csCamera.lookAt(0, 0.65, 0);
 
-    csCamera.position.set(0, 0.9, 3.8);
-    csCamera.lookAt(0, 0.7, 0);
     if (csTime >= CS_DUR) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
     return;
   }
@@ -2288,14 +2295,12 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
   playerMesh.rotation.y = -Math.PI / 2; // face left
   csScene.add(playerMesh);
 
-  // Tongue — BoxGeometry with pivot shifted to left end so it grows rightward
-  // With rotation.y=PI/2, attacker face (local z=0.31) maps to world x=-1.3+0.31=-0.99
+  // Tongue — BoxGeometry(1,…), scale.x + position.x updated per frame to extend rightward
+  // With rotation.y=PI/2, attacker face (local z=0.31) → world x = -1.3+0.31 = -0.99
   const tongueMat = new THREE.MeshLambertMaterial({ color: 0xcc1144 });
-  const tongueGeo = new THREE.BoxGeometry(1, 0.07, 0.07);
-  tongueGeo.translate(0.5, 0, 0); // pivot at left end
-  const tongueMesh = new THREE.Mesh(tongueGeo, tongueMat);
-  tongueMesh.position.set(-0.99, 0.63, 0); // attacker face world position
-  tongueMesh.scale.x = 0;
+  const tongueMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.12, 0.12), tongueMat);
+  tongueMesh.position.set(-0.99, 0.63, 0);
+  tongueMesh.scale.x = 0.001;
   csScene.add(tongueMesh);
 
   csMats = [];
