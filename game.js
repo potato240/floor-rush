@@ -2475,6 +2475,7 @@ function startMeeting() {
 
   renderMeetingUI();
   document.getElementById('meeting-ui').style.display = 'flex';
+  document.exitPointerLock();
 
   // Schedule NPC votes (random delay 2-9s)
   for (const e of susMeeting.entities) {
@@ -2587,6 +2588,7 @@ function endMeeting() {
   susMeeting = null;
   document.getElementById('meeting-ui').style.display = 'none';
   document.getElementById('meeting-skip-btn').style.display = '';
+  canvas.requestPointerLock();
 
   if (ejectedId) {
     if (ejectedId === 'player') {
