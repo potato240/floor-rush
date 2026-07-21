@@ -1869,6 +1869,29 @@ function loop() {
 // ─── Infection mode ───────────────────────────────────────────────────────────
 const MG_TYPES = ['mash','timing','sequence'];
 
+function addInfectedMouth(g) {
+  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xee3366 });
+
+  // Mouth slot on lower face
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.05), darkMat);
+  mouth.position.set(0, 0.64, 0.31);
+  mouth.rotation.z = 0.18; // slight droopy tilt
+  g.add(mouth);
+
+  // Tongue hanging out
+  const tongue = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.036, 0.2, 8), tongueMat);
+  tongue.position.set(0.03, 0.53, 0.3);
+  tongue.rotation.x = 0.35; // angle forward/down
+  tongue.rotation.z = 0.18;
+  g.add(tongue);
+
+  // Tongue tip (rounded blob)
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), tongueMat);
+  tip.position.set(0.03, 0.43, 0.33);
+  g.add(tip);
+}
+
 function tintInfected(mesh) {
   mesh.traverse(child => {
     if (child.isMesh && child.material) {
@@ -1877,6 +1900,7 @@ function tintInfected(mesh) {
       child.material = m;
     }
   });
+  addInfectedMouth(mesh);
 }
 
 function infectEntity(entity) {
