@@ -416,11 +416,36 @@ function startGame(mapKey) {
   }
 }
 
+function scaleMapDef(def, f) {
+  const og = def.grid;
+  const oRows = og.length, oCols = og[0].length;
+  const ng = [];
+  for (let r = 0; r < oRows; r++) {
+    for (let bi = 0; bi < f; bi++) {
+      const row = [];
+      for (let c = 0; c < oCols; c++)
+        for (let bj = 0; bj < f; bj++) row.push(og[r][c]);
+      ng.push(row);
+    }
+  }
+  const mid = Math.floor(f / 2);
+  const scalePos = p => p ? { x: p.x * f + mid, z: p.z * f + mid } : p;
+  const scaleRC  = p => p ? { r: p.r * f + mid, c: p.c * f + mid } : p;
+  return {
+    ...def,
+    grid: ng,
+    spawn:    scalePos(def.spawn),
+    elevator: scalePos(def.elevator),
+    ladders:  def.ladders ? def.ladders.map(l => ({ from: scaleRC(l.from), to: scaleRC(l.to) })) : undefined,
+    traps:    def.traps   ? def.traps.map(t => scaleRC(t)) : undefined,
+  };
+}
+
 function loadMap(mapKey) {
   if (scene) scene.clear();
   scene = new THREE.Scene();
 
-  mapDef = MAPS[mapKey];
+  mapDef = infectionMode ? scaleMapDef(MAPS[mapKey], 5) : MAPS[mapKey];
   _openCells = null;
   currentGrid = null;
   panels = [];
