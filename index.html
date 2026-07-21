@@ -230,6 +230,21 @@
     #sus-kill-info, #sus-sab-info { font-size:12px; font-weight:bold; letter-spacing:1px; }
     #sus-sabotage-bar { font-size:13px; font-weight:bold; }
 
+    /* Vent UI */
+    #vent-ui {
+      position:fixed; left:50%; bottom:160px; transform:translateX(-50%);
+      display:none; flex-direction:column; align-items:center; gap:6px;
+      background:rgba(0,0,0,0.88); border:2px solid #33ff88;
+      border-radius:12px; padding:14px 24px; z-index:80; min-width:200px;
+    }
+    #vent-header { font-size:11px; letter-spacing:3px; color:#33ff88; margin-bottom:4px; }
+    .vent-opt {
+      font-size:15px; font-weight:bold; color:#888; padding:5px 16px;
+      border-radius:8px; width:100%; text-align:center; transition:color .1s;
+    }
+    .vent-opt-active { color:#fff; background:rgba(51,255,136,0.12); }
+    #vent-hint { font-size:10px; color:#444; margin-top:4px; }
+
     /* Meeting / voting overlay */
     #meeting-ui {
       position:fixed; inset:0; z-index:95;
@@ -309,6 +324,11 @@
   <div id="infect-hud">
     <div id="infect-count"></div>
   </div>
+  <div id="vent-ui">
+    <div id="vent-header">VENT TO</div>
+    <div id="vent-options"></div>
+    <div id="vent-hint">↑↓ select · E confirm · Esc cancel</div>
+  </div>
   <div id="meeting-ui">
     <div id="meeting-header">EMERGENCY MEETING</div>
     <div id="meeting-grid"></div>
@@ -384,6 +404,6 @@
   }
 }
 </script>
-<script type="module" src="game.js?v=8"></script>
+<script type="module" src="game.js?v=9"></script>
 </body>
 </html>

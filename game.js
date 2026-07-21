@@ -356,6 +356,80 @@ const MAPS = {
   };
 }
 
+// ─── Polus vent network ───────────────────────────────────────────────────────
+// Each vent: grid col/row, display label, network id, linked vent ids
+const POLUS_VENTS = [
+  { id:'dropship',   col:26, row:4,  label:'Dropship',      net:0, links:['storage']             },
+  { id:'storage',    col:26, row:16, label:'Storage',        net:0, links:['dropship']            },
+  { id:'security',   col:3,  row:15, label:'Security',       net:1, links:['o2upper','o2lower']   },
+  { id:'o2upper',    col:3,  row:21, label:'O2',             net:1, links:['security','o2lower']  },
+  { id:'o2lower',    col:3,  row:27, label:'O2 (Lower)',     net:1, links:['security','o2upper']  },
+  { id:'electrical', col:10, row:14, label:'Electrical',     net:2, links:['labwest']             },
+  { id:'labwest',    col:41, row:15, label:'Laboratory',     net:2, links:['electrical']          },
+  { id:'comms',      col:16, row:22, label:'Communications', net:3, links:['weapons']             },
+  { id:'weapons',    col:15, row:32, label:'Weapons',        net:3, links:['comms']               },
+  { id:'office',     col:25, row:23, label:'Office',         net:4, links:['admin']               },
+  { id:'admin',      col:27, row:31, label:'Admin',          net:4, links:['office']              },
+  { id:'specimen',   col:50, row:28, label:'Specimen Room',  net:5, links:['labeast']             },
+  { id:'labeast',    col:48, row:14, label:'Laboratory',     net:5, links:['specimen']            },
+];
+
+function makeVentMesh(def) {
+  const grp = new THREE.Group();
+  const grateMat = new THREE.MeshLambertMaterial({ color:0x1a2530 });
+  const slatMat  = new THREE.MeshLambertMaterial({ color:0x2e4050 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 1.0), grateMat);
+  base.position.y = 0.03;
+  grp.add(base);
+  for (let i = 0; i < 5; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.1, 0.07), slatMat);
+    slat.position.set(0, 0.06, -0.35 + i * 0.175);
+    grp.add(slat);
+  }
+  const wx = def.col * TILE + TILE / 2;
+  const wz = def.row * TILE + TILE / 2;
+  grp.position.set(wx, 0, wz);
+  grp.userData = { type:'vent', def, worldPos: new THREE.Vector3(wx, 0, wz) };
+  scene.add(grp);
+  return grp;
+}
+
+function spawnVents() {
+  vents = POLUS_VENTS.map(def => makeVentMesh(def));
+}
+
+function openVentUI(def) {
+  if (ventSelection) return;
+  if (!def.links.length) return;
+  ventSelection = { def, options: def.links, idx: 0 };
+  renderVentUI();
+  document.getElementById('vent-ui').style.display = 'flex';
+}
+
+function renderVentUI() {
+  const el = document.getElementById('vent-options');
+  el.innerHTML = '';
+  ventSelection.options.forEach((id, i) => {
+    const d = POLUS_VENTS.find(v => v.id === id);
+    const div = document.createElement('div');
+    div.className = 'vent-opt' + (i === ventSelection.idx ? ' vent-opt-active' : '');
+    div.textContent = d ? d.label : id;
+    el.appendChild(div);
+  });
+}
+
+function closeVentUI() {
+  ventSelection = null;
+  document.getElementById('vent-ui').style.display = 'none';
+}
+
+function ventTravel(targetId) {
+  const def = POLUS_VENTS.find(v => v.id === targetId);
+  if (!def) return;
+  player.pos.set(def.col * TILE + TILE / 2, 0, def.row * TILE + TILE / 2);
+  closeVentUI();
+}
+
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 const canvas        = document.getElementById('canvas');
 const overlay       = document.getElementById('overlay');
@@ -474,6 +548,8 @@ let susOver      = false;
 let susKillCd    = 0;
 let susSabotage  = null;
 let susMeeting   = null; // { phase:'voting'|'results', timer, votes:{}, playerVoted, entities[], ejected }
+let vents        = [];   // vent mesh objects
+let ventSelection = null; // { def, options:[id,...], idx } when vent UI is open
 
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
@@ -487,10 +563,24 @@ let infectionOver      = false;
 // ─── Input ────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
+
+  // Vent UI navigation intercepts everything else
+  if (ventSelection) {
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+      e.preventDefault();
+      const dir = e.code === 'ArrowDown' ? 1 : -1;
+      ventSelection.idx = (ventSelection.idx + dir + ventSelection.options.length) % ventSelection.options.length;
+      renderVentUI();
+    }
+    if (e.code === 'KeyE') ventTravel(ventSelection.options[ventSelection.idx]);
+    if (e.code === 'Escape') closeVentUI();
+    return;
+  }
+
   if (e.code === 'KeyE') { if (activeMinigame) handleMinigameKey('KeyE'); else interact(); }
   if (e.code === 'KeyV') togglePOV();
   if (e.code === 'Escape' && activeMinigame) cancelMinigame();
-  if (activeMinigame && activeMinigame.type === 'sequence' &&
+  if (activeMinigame && (activeMinigame.type === 'sequence' || activeMinigame.type === 'calibrate') &&
       ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
     handleMinigameKey(e.code);
   if (e.code === 'KeyK' && susMode && playerIsImp && locked) susPlayerKill();
@@ -589,13 +679,15 @@ function loadMap(mapKey) {
 
   pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
   playerInfected = false; playerInfectLockout = 0; activeMinigame = null; infectionOver = false;
-  susOver = false; susKillCd = 0; susSabotage = null; playerIsImp = false;
+  susOver = false; susKillCd = 0; susSabotage = null; playerIsImp = false; susMeeting = null;
+  vents = []; ventSelection = null;
   buildMap();
   spawnPlayer();
   if (pvpMode) {
     initPVP();
   } else if (susMode) {
     spawnNPCs();
+    spawnVents();
     initSus();
     updateHUD();
     updateCrewDots();
@@ -1766,6 +1858,17 @@ function checkLookTarget() {
       }
     }
   }
+  // Check vents (sus mode only)
+  if (susMode) {
+    for (const v of vents) {
+      if (player.pos.distanceTo(v.userData.worldPos) < INTERACT_DIST + 0.5) {
+        lookTarget = { type:'vent', obj:v };
+        interactHint.textContent = playerIsImp ? '[E] Enter Vent' : '[!] Vent';
+        interactHint.style.display = 'block';
+        return;
+      }
+    }
+  }
   // Check dead heads
   for (const dh of deadHeads) {
     if (dh.carriedBy) continue;
@@ -1791,7 +1894,10 @@ function interact() {
   if (!lookTarget) return;
   if (lookTarget.type === 'panel') {
     if (infectionMode) { if (!playerInfected) startMinigame(lookTarget.obj); }
+    else if (susMode) { if (!playerIsImp) startMinigame(lookTarget.obj); }
     else activatePanel(lookTarget.obj);
+  } else if (lookTarget.type === 'vent') {
+    if (playerIsImp && susMode) openVentUI(lookTarget.obj.userData.def);
   } else if (lookTarget.type === 'head' && !player.carrying) {
     if (susMode) {
       doFlash(0xff8800, 0.5);
@@ -2032,7 +2138,7 @@ function loop() {
 }
 
 // ─── Infection mode ───────────────────────────────────────────────────────────
-const MG_TYPES = ['mash','timing','sequence'];
+const MG_TYPES = ['mash','timing','sequence','hold','calibrate'];
 
 function addInfectedMouth(g) {
   const darkMat  = new THREE.MeshLambertMaterial({ color: 0x050505 });
@@ -2203,14 +2309,23 @@ function startMinigame(panel) {
   const type = panel.userData.minigameType || 'mash';
   let state;
   if (type === 'mash') {
-    state = { count:0, required:10, timer:6.0 };
+    state = { count:0, required:12, timer:7.0 };
   } else if (type === 'timing') {
     const zs = 0.2 + Math.random() * 0.35;
-    state = { cursor:0, dir:1, speed:1.1 + Math.random()*0.8, zoneStart:zs, zoneEnd:zs+0.22, misses:0 };
-  } else {
+    state = { cursor:0, dir:1, speed:1.0 + Math.random()*0.9, zoneStart:zs, zoneEnd:zs+0.22, misses:0 };
+  } else if (type === 'sequence') {
     const DIRS = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
-    const len = 3 + Math.floor(Math.random() * 3);
+    const len = 4 + Math.floor(Math.random() * 3);
     state = { seq: Array.from({length:len}, ()=>DIRS[Math.floor(Math.random()*4)]), index:0 };
+  } else if (type === 'hold') {
+    state = { held:0, required:3.0 };
+  } else {
+    // calibrate: 3 sliders, move with left/right, E to lock each
+    state = { sliders: Array.from({length:3}, () => ({
+      pos: 0.1 + Math.random() * 0.5,
+      target: 0.3 + Math.random() * 0.4,
+      locked: false
+    })), current:0 };
   }
   activeMinigame = { panel, type, state };
   renderMinigameUI();
@@ -2234,12 +2349,31 @@ function renderMinigameUI() {
         <div class="mg-timing-cursor" id="mg-cursor" style="left:0%"></div>
       </div>
       <div id="mg-misses">3 attempts left</div>`;
-  } else {
-    const keys = mg.state.seq.map((k,i)=>
+  } else if (mg.type === 'sequence') {
+    const seqKeys = mg.state.seq.map((k,i)=>
       `<span class="mg-seq-key ${i===0?'mg-seq-active':''}">${arrows[k]}</span>`).join('');
     el.innerHTML = `<div class="mg-label">PRESS THE SEQUENCE!</div>
-      <div id="mg-seq-row">${keys}</div>
+      <div id="mg-seq-row">${seqKeys}</div>
       <div class="mg-hint">Use arrow keys</div>`;
+  } else if (mg.type === 'hold') {
+    el.innerHTML = `<div class="mg-label">HOLD [E]!</div>
+      <div class="mg-bar-wrap"><div class="mg-bar-fill" id="mg-fill" style="width:0%"></div></div>
+      <div class="mg-hint">Keep holding to fill</div>`;
+  } else {
+    // calibrate
+    const s = mg.state;
+    const sliderHTML = s.sliders.map((sl, i) => {
+      const pct = sl.pos * 100;
+      const tl  = sl.target * 100, tw = 8;
+      const active = i === s.current && !sl.locked;
+      return `<div class="mg-label" style="font-size:11px;margin-bottom:2px">SENSOR ${i+1}${sl.locked?' ✓':active?' ←→':''}</div>
+        <div class="mg-timing-wrap" style="margin-bottom:8px">
+          <div class="mg-timing-zone" style="left:${tl}%;width:${tw}%;background:rgba(0,255,100,0.45)"></div>
+          <div class="mg-timing-cursor" style="left:${pct}%;background:${sl.locked?'#00ff88':active?'#fff':'#555'}"></div>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div class="mg-label">ALIGN SENSORS</div>${sliderHTML}
+      <div class="mg-hint">← → to move · E to lock</div>`;
   }
 }
 
@@ -2260,6 +2394,24 @@ function updateMinigame(dt) {
     if (mg.state.cursor <= 0) mg.state.dir = 1;
     const c = document.getElementById('mg-cursor');
     if (c) c.style.left = (mg.state.cursor * 100) + '%';
+  } else if (mg.type === 'hold') {
+    if (keys['KeyE']) {
+      mg.state.held = Math.min(mg.state.required, mg.state.held + dt);
+    } else {
+      mg.state.held = Math.max(0, mg.state.held - dt * 0.5);
+    }
+    const pct = mg.state.held / mg.state.required * 100;
+    const f = document.getElementById('mg-fill');
+    if (f) f.style.width = pct + '%';
+    if (mg.state.held >= mg.state.required) completeMinigame();
+  } else if (mg.type === 'calibrate') {
+    const s = mg.state;
+    if (s.current < s.sliders.length && !s.sliders[s.current].locked) {
+      const speed = 0.5 * dt;
+      if (keys['ArrowLeft'])  s.sliders[s.current].pos = Math.max(0, s.sliders[s.current].pos - speed);
+      if (keys['ArrowRight']) s.sliders[s.current].pos = Math.min(1, s.sliders[s.current].pos + speed);
+      renderMinigameUI();
+    }
   }
 }
 
@@ -2284,6 +2436,19 @@ function handleMinigameKey(code) {
         const m = document.getElementById('mg-misses');
         if (m) m.textContent = (3 - mg.state.misses) + ' attempts left';
       }
+    }
+  } else if (mg.type === 'calibrate' && code === 'KeyE') {
+    const s = mg.state;
+    const sl = s.sliders[s.current];
+    if (!sl) return;
+    const inZone = sl.pos >= sl.target && sl.pos <= sl.target + 0.08;
+    if (inZone) {
+      sl.locked = true;
+      s.current++;
+      if (s.current >= s.sliders.length) { completeMinigame(); return; }
+      renderMinigameUI();
+    } else {
+      doFlash(0xff2200, 0.2);
     }
   } else if (mg.type === 'sequence') {
     const expected = mg.state.seq[mg.state.index];
@@ -2319,6 +2484,10 @@ function cancelMinigame() {
 
 // ─── Sus (Among Us) mode ──────────────────────────────────────────────────────
 function initSus() {
+  // Assign minigame types to panels for crew tasks
+  shuffle(panels);
+  panels.forEach((p, i) => { p.userData.minigameType = MG_TYPES[i % MG_TYPES.length]; });
+
   const pool = [...npcs];
   shuffle(pool);
   for (let i = 0; i < SUS_IMP_COUNT; i++) {
@@ -2433,6 +2602,31 @@ function updateSus(dt) {
     susSabotage.timer -= dt;
     if (susSabotage.timer <= 0) {
       susOver = true; showMessage('SABOTAGE FAILED — IMPOSTORS WIN!', 5000); doFlash(0xff0000, 0.9);
+    }
+  }
+  // NPC impostors occasionally vent to reposition
+  if (vents.length) {
+    for (const npc of npcs) {
+      if (!npc.isImp || npc.dead) continue;
+      npc.ventCd = (npc.ventCd || 15 + Math.random() * 20) - dt;
+      if (npc.ventCd <= 0) {
+        npc.ventCd = 20 + Math.random() * 25;
+        // Find nearest vent
+        let nearDef = null, nearDist = Infinity;
+        for (const v of vents) {
+          const d = npc.mesh.position.distanceTo(v.userData.worldPos);
+          if (d < nearDist) { nearDist = d; nearDef = v.userData.def; }
+        }
+        if (nearDef && nearDef.links.length && nearDist < TILE * 5) {
+          const destId = nearDef.links[Math.floor(Math.random() * nearDef.links.length)];
+          const dest = POLUS_VENTS.find(v => v.id === destId);
+          if (dest) {
+            npc.mesh.position.x = dest.col * TILE + TILE / 2;
+            npc.mesh.position.z = dest.row * TILE + TILE / 2;
+            npc.path = null;
+          }
+        }
+      }
     }
   }
   // NPC impostors kill lone crewmates
