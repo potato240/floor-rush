@@ -553,9 +553,10 @@ let ventSelection = null; // { def, options:[id,...], idx } when vent UI is open
 
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
-const INFECT_NPC_SPEED  = NPC_SPEED * 0.5;
+const INFECT_NPC_SPEED  = NPC_SPEED;
 let infectionMode      = false;
 let playerInfected     = false;
+let footprints         = []; // { mesh, life } green trail marks left by infected
 let playerInfectLockout = 0;
 let activeMinigame     = null;
 let infectionOver      = false;
@@ -671,6 +672,8 @@ function loadMap(mapKey) {
   mummies = []; ladderPairs = []; trapCells = [];
   for (const dh of deadHeads) scene.remove(dh.grp);
   deadHeads = [];
+  for (const fp of footprints) scene.remove(fp.mesh);
+  footprints = [];
   lookTarget = null;
 
   const bgColor = 0x0d0d14;
@@ -1520,7 +1523,7 @@ function updatePlayer(dt) {
     player.stamina = Math.min(100, player.stamina + 20 * dt);
   }
   updateStaminaHUD();
-  const baseSpd = (infectionMode && playerInfected) ? PLAYER_SPEED * 0.5 : PLAYER_SPEED;
+  const baseSpd = PLAYER_SPEED;
   const spd = sprinting ? baseSpd * SPRINT_MULT : baseSpd;
 
   if (move.lengthSq() > 0) {
@@ -2475,6 +2478,53 @@ function updateInfection(dt) {
     for (const npc of npcs) {
       if (!npc.infected && !npc.dead && player.pos.distanceTo(npc.mesh.position) < INFECT_RANGE)
         infectEntity(npc);
+    }
+  }
+
+  // Green footprint trail for all infected entities
+  updateFootprints(dt);
+}
+
+const FOOTPRINT_INTERVAL = 0.18; // seconds between prints
+const FOOTPRINT_LIFE     = 3.5;  // seconds before fade-out
+const fpMat = new THREE.MeshBasicMaterial({ color: 0x22cc55, transparent: true, opacity: 0.75 });
+
+function spawnFootprint(x, z) {
+  const geo = new THREE.PlaneGeometry(0.22, 0.32);
+  const mesh = new THREE.Mesh(geo, fpMat.clone());
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.rotation.z = Math.random() * Math.PI * 2;
+  mesh.position.set(x + (Math.random() - 0.5) * 0.15, 0.01, z + (Math.random() - 0.5) * 0.15);
+  scene.add(mesh);
+  footprints.push({ mesh, life: FOOTPRINT_LIFE });
+}
+
+function updateFootprints(dt) {
+  // Spawn for player
+  if (playerInfected) {
+    player._fpTimer = (player._fpTimer || 0) - dt;
+    if (player._fpTimer <= 0) {
+      spawnFootprint(player.pos.x, player.pos.z);
+      player._fpTimer = FOOTPRINT_INTERVAL;
+    }
+  }
+  // Spawn for infected NPCs
+  for (const npc of npcs) {
+    if (!npc.infected || npc.dead) continue;
+    npc._fpTimer = (npc._fpTimer || 0) - dt;
+    if (npc._fpTimer <= 0) {
+      spawnFootprint(npc.mesh.position.x, npc.mesh.position.z);
+      npc._fpTimer = FOOTPRINT_INTERVAL;
+    }
+  }
+  // Fade and remove old prints
+  for (let i = footprints.length - 1; i >= 0; i--) {
+    const fp = footprints[i];
+    fp.life -= dt;
+    fp.mesh.material.opacity = Math.max(0, (fp.life / FOOTPRINT_LIFE) * 0.75);
+    if (fp.life <= 0) {
+      scene.remove(fp.mesh);
+      footprints.splice(i, 1);
     }
   }
 }
