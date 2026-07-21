@@ -1903,14 +1903,15 @@ function tintInfected(mesh) {
   addInfectedMouth(mesh);
 }
 
-function infectEntity(entity) {
+function infectEntity(entity, isFirst = false) {
   if (entity === 'player') {
     if (playerInfected) return;
     playerInfected = true;
     playerInfectLockout = 15;
     tintInfected(player.mesh);
     if (activeMinigame) cancelMinigame();
-    showInfectCutscene();
+    if (isFirst) showInfectCutscene();
+    else doFlash(0x00ff44, 0.7);
   } else {
     if (entity.infected) return;
     entity.infected = true;
@@ -1930,7 +1931,7 @@ function initInfection() {
   panels.forEach((p, i) => { p.userData.minigameType = types[i % types.length]; });
   // Pick a random entity (player or any NPC) as first infected
   const pool = ['player', ...npcs];
-  infectEntity(pool[Math.floor(Math.random() * pool.length)]);
+  infectEntity(pool[Math.floor(Math.random() * pool.length)], true);
   updateInfectionHUD();
 }
 
