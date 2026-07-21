@@ -2073,7 +2073,41 @@ function updateCutscene(dt) {
   const mesh = csScene && csScene.userData.char;
   if (!mesh) return;
 
-  const isDeath = csScene && csScene.userData.csType === 'death';
+  const csType = csScene && csScene.userData.csType;
+
+  if (csType === 'attack') {
+    const { attackerMesh, playerMesh, tongueMesh } = csScene.userData;
+    // Phase 1 (0–0.25): both characters idle, attacker leans forward
+    const lean = Math.min(1, t / 0.25);
+    attackerMesh.rotation.z = -lean * 0.22;
+    attackerMesh.position.x = -1.3 + lean * 0.2;
+
+    // Phase 2 (0.25–0.65): tongue shoots out
+    const tongueT = Math.max(0, Math.min(1, (t - 0.25) / 0.4));
+    const tongueLen = tongueT * 2.58; // attacker face to player face gap
+    tongueMesh.scale.x = tongueLen;
+
+    // Phase 3 (0.65–1.0): player shakes and turns green
+    const infectT = Math.max(0, Math.min(1, (t - 0.65) / 0.35));
+    const shake = infectT < 0.7 ? infectT * Math.sin(csTime * 45) * 0.06 : 0;
+    playerMesh.position.x = 1.3 + shake;
+    playerMesh.rotation.z = infectT < 0.7 ? Math.sin(csTime * 38) * infectT * 0.04 : 0;
+    const green = new THREE.Color(0x33bb44);
+    for (const { mat, orig } of csMats) {
+      mat.color.lerpColors(orig, green, infectT);
+      if (mat.emissive) mat.emissive.setHex(infectT > 0.4 ? 0x114422 : 0x000000);
+    }
+
+    // Retract tongue in phase 3
+    if (infectT > 0.3) tongueMesh.scale.x = Math.max(0, tongueLen * (1 - (infectT - 0.3) / 0.7));
+
+    csCamera.position.set(0, 0.9, 3.8);
+    csCamera.lookAt(0, 0.7, 0);
+    if (csTime >= CS_DUR) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
+    return;
+  }
+
+  const isDeath = csType === 'death';
 
   if (isDeath) {
     // Character collapses and turns dark red
@@ -2206,14 +2240,15 @@ function tintInfected(mesh) {
   addInfectedMouth(mesh);
 }
 
-function infectEntity(entity, isFirst = false) {
+function infectEntity(entity, isFirst = false, attacker = null) {
   if (entity === 'player') {
     if (playerInfected) return;
     playerInfected = true;
     playerInfectLockout = 15;
     tintInfected(player.mesh);
     if (activeMinigame) cancelMinigame();
-    if (isFirst || !csActive) showInfectCutscene();
+    if (isFirst) showInfectCutscene();
+    else if (attacker && !csActive) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
     else doFlash(0x00ff44, 0.7);
   } else {
     if (entity.infected) return;
@@ -2227,6 +2262,67 @@ function infectEntity(entity, isFirst = false) {
 
 function showInfectCutscene() {
   startInfectCutscene();
+}
+
+function startInfectAttackCutscene(attackerColor, attackerHat) {
+  csScene = new THREE.Scene();
+  csScene.background = new THREE.Color(0x020a04);
+  csScene.add(new THREE.AmbientLight(0x224422, 1.2));
+  const key = new THREE.PointLight(0x33ff66, 2.0, 12);
+  key.position.set(0, 4, 3);
+  csScene.add(key);
+  csGreenLight = new THREE.PointLight(0x33ff66, 0.5, 10);
+  csGreenLight.position.set(0, 1, 2);
+  csScene.add(csGreenLight);
+
+  // Attacker (infected NPC) on the left
+  const attackerMesh = makeCrewmate(attackerColor, attackerHat, 'none');
+  tintInfected(attackerMesh);
+  attackerMesh.position.set(-1.3, 0, 0);
+  csScene.add(attackerMesh);
+
+  // Player on the right
+  const playerMesh = makeCrewmate(chosenColor, chosenHat, chosenMouth);
+  playerMesh.position.set(1.3, 0, 0);
+  csScene.add(playerMesh);
+
+  // Tongue spike — a thin box that will extend from attacker face toward player
+  const tongueMat = new THREE.MeshLambertMaterial({ color: 0xcc1144 });
+  const tongueMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.07, 0.07), tongueMat);
+  // Pivot at left end: offset box geometry so left edge is at origin
+  tongueMesh.geometry.translate(0.5, 0, 0);
+  tongueMesh.position.set(-1.3 + 0.01, 0.63, 0.31);
+  tongueMesh.scale.x = 0;
+  csScene.add(tongueMesh);
+
+  csMats = [];
+  playerMesh.traverse(child => {
+    if (child.isMesh && child.material && child.material.color &&
+        !(child.material instanceof THREE.MeshBasicMaterial)) {
+      const m = child.material.clone();
+      child.material = m;
+      csMats.push({ mat: m, orig: m.color.clone() });
+    }
+  });
+
+  csCamera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 50);
+  csCamera.position.set(0, 0.9, 3.8);
+  csCamera.lookAt(0, 0.7, 0);
+
+  csScene.userData = { csType:'attack', attackerMesh, playerMesh, tongueMesh };
+  csActive = true;
+  csTime = 0;
+
+  // Show infection text overlay after tongue hits
+  const el = document.getElementById('infect-cutscene');
+  if (el) {
+    el.style.display = 'none';
+    setTimeout(() => {
+      el.style.display = 'flex';
+      el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    }, 1800);
+    setTimeout(() => { el.style.display = 'none'; }, 3400);
+  }
 }
 
 function initInfection() {
@@ -2307,7 +2403,7 @@ function updateInfection(dt) {
       }
       npcFollowPath(npc, dt, 0, INFECT_NPC_SPEED);
       if (nearDist < INFECT_RANGE && npc.damageCooldown <= 0) {
-        infectEntity(nearEntity);
+        infectEntity(nearEntity, false, npc);
         npc.damageCooldown = 1.5;
       }
     }
