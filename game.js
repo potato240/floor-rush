@@ -2104,16 +2104,16 @@ function updateCutscene(dt) {
     const shake = infectT < 0.8 && fallT === 0 ? Math.sin(ct * 45) * infectT * 0.07 : 0;
 
     if (roarT > 0) {
-      // Face camera so front-face mouth is visible; body shake
-      playerMesh.rotation.y = 0;
+      // Stay in profile, shake, open side mouth
+      playerMesh.rotation.y = -Math.PI / 2;
       playerMesh.rotation.z = Math.sin(ct * 28) * roarT * 0.1;
       playerMesh.position.set(1.3, -0.18, 0);
       if (roarMouth) { const o = Math.min(1, roarT * 3); roarMouth.scale.set(o, o, 1); }
     } else if (riseT > 0) {
-      // Rise from flat: un-fall, rotate to face camera
+      // Rise from flat back to profile
       const e = ease(riseT);
       playerMesh.rotation.z = -Math.PI / 2 * (1 - e);
-      playerMesh.rotation.y = -Math.PI / 2 * (1 - e); // profile → face camera
+      playerMesh.rotation.y = -Math.PI / 2;
       playerMesh.position.set(1.3, -0.5 + 0.32 * e, 0);
     } else if (fallT > 0) {
       // Recoil backward from the hit (top tilts away from attacker)
@@ -2144,14 +2144,13 @@ function updateCutscene(dt) {
     }
 
     if (roarT > 0) {
-      // Camera zooms in straight on the player's face
+      // Zoom in on the profile from the side
       const z = Math.min(1, roarT * 1.5);
-      csCamera.position.set(1.3, 0.75 + z * 0.2, 4.2 - z * 2.2);
+      csCamera.position.set(0, 1.0 + z * 0.1, 4.2 - z * 1.2);
       csCamera.lookAt(1.3, 0.75, 0);
     } else if (riseT > 0) {
-      // Pan camera from side toward front as player turns
-      csCamera.position.set(riseT * 1.3, 1.1, 3.8);
-      csCamera.lookAt(1.3, 0.65, 0);
+      csCamera.position.set(0, 1.1, 3.8);
+      csCamera.lookAt(0.8, 0.65, 0);
     } else {
       const zoomIn  = Math.min(1, tongueT * 1.6);
       const zoomOut = Math.max(0, (infectT - 0.7) / 0.3);
@@ -2355,13 +2354,13 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
   tongueMesh.scale.x = 0.001;
   csScene.add(tongueMesh);
 
-  // Roar mouth — dark gape on front face, visible when player faces camera (rotation.y=0).
-  // Uses MeshBasicMaterial so it stays black and is excluded from the green tint traverse.
+  // Roar mouth — on the local +X face (camera-facing side in profile rotation.y=-PI/2).
+  // MeshBasicMaterial keeps it pure black and excludes it from the green tint traverse.
   const roarMouth = new THREE.Mesh(
-    new THREE.BoxGeometry(0.34, 0.21, 0.07),
+    new THREE.BoxGeometry(0.07, 0.20, 0.28),
     new THREE.MeshBasicMaterial({ color: 0x000000 })
   );
-  roarMouth.position.set(0, 0.63, 0.33);
+  roarMouth.position.set(0.315, 0.74, 0);
   roarMouth.scale.set(0, 0, 1);
   playerMesh.add(roarMouth);
 
