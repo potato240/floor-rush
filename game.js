@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // ─── Config ───────────────────────────────────────────────────────────────────
 const TILE           = 4;
 const WALL_H         = 5;
-const PLAYER_SPEED   = 6;
+const PLAYER_SPEED   = 2.8;
 const NPC_SPEED      = 2.8;
 const NPC_COUNT      = 5;
 const CAM_DIST       = 4.5;
