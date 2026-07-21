@@ -1705,10 +1705,10 @@ function checkElevatorFill() {
     }
   }
 
-  // Dead entities don't block advancement
-  const playerReady = player.dead || isInElevator(player.pos);
+  // Dead and infected entities don't block advancement
+  const playerReady = player.dead || (infectionMode && playerInfected) || isInElevator(player.pos);
   if (!playerReady) return;
-  const allNpcsReady = npcs.every(n => n.dead || isInElevator(n.mesh.position));
+  const allNpcsReady = npcs.every(n => n.dead || (infectionMode && n.infected) || isInElevator(n.mesh.position));
   if (allNpcsReady) nextFloor();
 }
 
