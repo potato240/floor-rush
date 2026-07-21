@@ -2100,53 +2100,55 @@ function updateCutscene(dt) {
     const ease = v => v < 0.5 ? 2*v*v : 1 - Math.pow(-2*v+2,2)/2;
     const shake = infectT < 0.8 && fallT === 0 ? Math.sin(ct * 45) * infectT * 0.07 : 0;
 
+    // Player always faces sideways (rotation.y = -PI/2) throughout
+    playerMesh.rotation.y = -Math.PI / 2;
+
     if (roarT > 0) {
-      playerMesh.rotation.z = Math.sin(ct * 28) * roarT * 0.1;
-      playerMesh.rotation.y = 0;
-      playerMesh.position.set(1.3, 0, 0);
+      // Kneeling forward lean + body shake
+      playerMesh.rotation.z = Math.PI / 5 + Math.sin(ct * 28) * roarT * 0.12;
+      playerMesh.position.set(1.3, -0.18, 0);
       if (roarMouth) { const o = Math.min(1, roarT * 3); roarMouth.scale.set(o, o, 1); }
     } else if (riseT > 0) {
+      // Rise from flat to forward-leaning kneel
       const e = ease(riseT);
-      playerMesh.rotation.z = -Math.PI / 2 * (1 - e);
-      playerMesh.rotation.y = -Math.PI / 2 * (1 - e);
-      playerMesh.position.set(1.3, -0.5 * (1 - e), 0);
+      playerMesh.rotation.z = Math.PI / 2 * (1 - e) + Math.PI / 5 * e;
+      playerMesh.position.set(1.3, -0.5 + 0.32 * e, 0);
     } else if (fallT > 0) {
+      // Fall forwards (toward attacker = rotation.z positive)
       const e = ease(fallT);
-      playerMesh.rotation.z = -Math.PI / 2 * e;
+      playerMesh.rotation.z = Math.PI / 2 * e;
       playerMesh.position.set(1.3, -0.5 * e, 0);
-      playerMesh.rotation.y = -Math.PI / 2;
     } else {
       playerMesh.position.set(1.3 + shake, 0, 0);
       playerMesh.rotation.z = Math.sin(ct * 38) * infectT * 0.05;
-      playerMesh.rotation.y = -Math.PI / 2;
     }
 
     const green = new THREE.Color(0x33bb44);
     const greenAmt = Math.min(1, infectT * 1.5);
-    const fullyGreen = fallT > 0 || riseT > 0 || roarT > 0;
+    // During roar pulse the green emissive strongly
+    const roarPulse = roarT > 0 ? 0.5 + 0.5 * Math.abs(Math.sin(ct * 12)) : 0;
     for (const { mat, orig } of csMats) {
-      mat.color.lerpColors(orig, green, fullyGreen ? 1 : greenAmt);
-      if (mat.emissive) mat.emissive.setHex(roarT > 0 ? 0x225533 : (greenAmt > 0.3 ? 0x114422 : 0x000000));
+      mat.color.lerpColors(orig, green, roarT > 0 ? 1 : (fallT > 0 || riseT > 0 ? 1 : greenAmt));
+      if (mat.emissive) {
+        const em = roarT > 0 ? Math.floor(0x11 + 0x33 * roarPulse) : (greenAmt > 0.3 ? 0x11 : 0);
+        mat.emissive.setRGB(0, em / 255, em / 255 * 0.6);
+      }
     }
     if (csGreenLight) {
-      csGreenLight.intensity = roarT > 0 ? 1.2 + Math.abs(Math.sin(ct * 15)) * 2.0
+      csGreenLight.intensity = roarT > 0 ? 1.5 + roarPulse * 2.5
         : infectT > 0 ? infectT * 1.2 : 0;
     }
 
-    // Camera
-    if (roarT > 0) {
-      const z = Math.min(1, roarT * 2);
-      csCamera.position.set(1.3, 0.6 + z * 0.3, 4.2 - z * 2.8);
-      csCamera.lookAt(1.3, 0.8, 0);
-    } else if (riseT > 0) {
-      csCamera.position.set(riseT * 1.3, 1.1, 3.5);
-      csCamera.lookAt(1.3, 0.65, 0);
-    } else {
-      const zoomIn  = Math.min(1, tongueT * 1.6);
-      const zoomOut = Math.max(0, (infectT - 0.7) / 0.3);
-      csCamera.position.set(0, 1.1 - zoomIn * 0.2 + zoomOut * 0.15, 4.2 - zoomIn * 1.8 + zoomOut * 1.4);
-      csCamera.lookAt(0, 0.65, 0);
-    }
+    // Camera stays on the profile side throughout; zooms in slightly for roar
+    const zoomIn  = Math.min(1, tongueT * 1.6);
+    const zoomOut = Math.max(0, (infectT - 0.7) / 0.3);
+    const roarZoom = Math.min(1, roarT * 1.5);
+    csCamera.position.set(
+      0,
+      1.1 - zoomIn * 0.2 + zoomOut * 0.15,
+      4.2 - zoomIn * 1.8 + zoomOut * 1.4 - roarZoom * 0.8
+    );
+    csCamera.lookAt(0.6, 0.65, 0);
 
     if (ct >= 6.0) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
     return;
@@ -2344,12 +2346,13 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
   tongueMesh.scale.x = 0.001;
   csScene.add(tongueMesh);
 
-  // Roar mouth — dark gape on player's front face, starts closed, opens during roar
+  // Roar mouth — sits on the local +X face of the head (the side the camera sees in profile).
+  // Uses MeshBasicMaterial so it stays black and is excluded from the green tint traverse.
   const roarMouth = new THREE.Mesh(
-    new THREE.BoxGeometry(0.34, 0.22, 0.07),
-    new THREE.MeshLambertMaterial({ color: 0x050805 })
+    new THREE.BoxGeometry(0.07, 0.17, 0.26),
+    new THREE.MeshBasicMaterial({ color: 0x000000 })
   );
-  roarMouth.position.set(0, 0.60, 0.32);
+  roarMouth.position.set(0.30, 0.72, 0);
   roarMouth.scale.set(0, 0, 1);
   playerMesh.add(roarMouth);
 
