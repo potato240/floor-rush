@@ -543,7 +543,7 @@ function loadMap(mapKey) {
 
   const bgColor = 0x0d0d14;
   scene.background = new THREE.Color(bgColor);
-  scene.fog = new THREE.Fog(bgColor, susMode ? 3 : 16, susMode ? 10 : 50);
+  scene.fog = new THREE.Fog(bgColor, 16, 50);
 
   pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
   playerInfected = false; playerInfectLockout = 0; activeMinigame = null; infectionOver = false;
