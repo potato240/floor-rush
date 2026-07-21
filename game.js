@@ -360,7 +360,7 @@ let pvpOver = false;
 
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
-const INFECT_NPC_SPEED  = 3.8;
+const INFECT_NPC_SPEED  = NPC_SPEED * 1.5;
 let infectionMode   = false;
 let playerInfected  = false;
 let activeMinigame  = null;
@@ -1242,7 +1242,7 @@ function updatePlayer(dt) {
     if (keys['KeyD']||keys['ArrowRight']) move.add(rgt);
   }
 
-  const wantSprint = (keys['ShiftLeft']||keys['ShiftRight']) && !player.dead;
+  const wantSprint = (keys['ShiftLeft']||keys['ShiftRight']) && !player.dead && !infectionMode;
   const sprinting = wantSprint && player.stamina > 0;
   if (sprinting) {
     player.stamina = Math.max(0, player.stamina - 40 * dt);
@@ -1785,7 +1785,9 @@ function infectEntity(entity) {
 function initInfection() {
   const types = MG_TYPES;
   panels.forEach((p, i) => { p.userData.minigameType = types[i % types.length]; });
-  if (npcs.length > 0) infectEntity(npcs[Math.floor(Math.random() * npcs.length)]);
+  // Pick a random entity (player or any NPC) as first infected
+  const pool = ['player', ...npcs];
+  infectEntity(pool[Math.floor(Math.random() * pool.length)]);
   updateInfectionHUD();
 }
 
@@ -1806,6 +1808,31 @@ function checkInfectionEnd() {
 function updateInfection(dt) {
   if (infectionOver) return;
   updateMinigame(dt);
+
+  // Non-infected NPCs flee from nearest infected entity
+  for (const npc of npcs) {
+    if (npc.infected || npc.dead) continue;
+    let nearDist = Infinity, nearPos = null;
+    if (playerInfected) {
+      const d = npc.mesh.position.distanceTo(player.pos);
+      if (d < nearDist) { nearDist = d; nearPos = player.pos.clone(); }
+    }
+    for (const other of npcs) {
+      if (!other.infected || other.dead) continue;
+      const d = npc.mesh.position.distanceTo(other.mesh.position);
+      if (d < nearDist) { nearDist = d; nearPos = other.mesh.position.clone(); }
+    }
+    if (nearPos && nearDist < 8) {
+      const away = npc.mesh.position.clone().sub(nearPos).setY(0).normalize();
+      const fleeTarget = npc.mesh.position.clone().add(away.multiplyScalar(6));
+      npc.fleeTimer = (npc.fleeTimer || 0) - dt;
+      if (npc.fleeTimer <= 0 || npc.path.length === 0) {
+        npcComputePath(npc, fleeTarget.x, fleeTarget.z);
+        npc.fleeTimer = 0.6 + Math.random() * 0.3;
+      }
+      npcFollowPath(npc, dt, 0, NPC_SPEED);
+    }
+  }
 
   for (const npc of npcs) {
     if (!npc.infected || npc.dead) continue;
