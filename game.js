@@ -273,6 +273,7 @@ const messageEl     = document.getElementById('message');
 const flashEl       = document.getElementById('flash');
 const carryHint     = document.getElementById('carry-hint');
 const spSegs        = [0,1,2].map(i => document.getElementById(`sp-${i}`));
+const sprintFill    = document.getElementById('sprint-fill');
 
 // ─── Player choices ───────────────────────────────────────────────────────────
 let chosenColor = AU_COLORS[0].hex;
@@ -899,14 +900,11 @@ function spawnEnemies() {
 
 // ─── HP / damage ─────────────────────────────────────────────────────────────
 function updateStaminaHUD() {
-  // Segments 0..hp-1 are available; within those, sprint level fills from left.
-  // States: cyan (sprint available), depleted (sprint empty), lost/red (HP gone).
-  const litSprint = Math.ceil(player.stamina / 100 * player.hp);
   spSegs.forEach((s, i) => {
-    const hpLost = i >= player.hp;
-    s.classList.toggle('lost',     hpLost);
-    s.classList.toggle('depleted', !hpLost && i >= litSprint);
+    s.classList.toggle('lost', i >= player.hp);
+    s.classList.remove('depleted');
   });
+  sprintFill.style.width = player.stamina + '%';
 }
 
 function damagePlayer() {
@@ -1330,11 +1328,16 @@ function worldToCell(x, z) {
 function npcComputePath(npc, destX, destZ) {
   const from = worldToCell(npc.mesh.position.x, npc.mesh.position.z);
   const to   = worldToCell(destX, destZ);
-  // Block elevator cell in pathfinding while door is closed
+  // Block elevator cell while door is closed, and always block trap cells
   let grid = currentGrid;
-  if (!elevatorOpen && grid) {
+  if (grid && (!elevatorOpen || trapCells.length > 0)) {
     grid = currentGrid.map(r => [...r]);
-    grid[elevatorCell.r][elevatorCell.c] = 1;
+    if (!elevatorOpen) grid[elevatorCell.r][elevatorCell.c] = 1;
+    for (const trap of trapCells) {
+      const tc = worldToCell(trap.pos.x, trap.pos.z);
+      if (tc.r >= 0 && tc.r < grid.length && tc.c >= 0 && tc.c < grid[0].length)
+        grid[tc.r][tc.c] = 1;
+    }
   }
   const path = aStar(grid, from.r, from.c, to.r, to.c);
   npc.path = path || [];
@@ -1389,8 +1392,8 @@ function updateNPCs(dt) {
     }
     npc.elevatorTarget = false;
 
-    // ── Pick up nearby dead head when elevator is open ──
-    if (elevatorOpen && !npc.carrying) {
+    // ── Pick up nearby dead head ──
+    if (!npc.carrying) {
       const nearHead = deadHeads.find(dh => !dh.carriedBy &&
         Math.hypot(npc.mesh.position.x-dh.grp.position.x, npc.mesh.position.z-dh.grp.position.z) < 1.5);
       if (nearHead) { nearHead.carriedBy = 'npc'; npc.carrying = nearHead; }
