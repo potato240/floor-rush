@@ -384,15 +384,8 @@ canvas.addEventListener('click', () => { if (!locked) canvas.requestPointerLock(
 canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpMode) pvpPlayerAttack(); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-  });
-});
-
 playBtn.addEventListener('click', () => {
-  pvpMode = document.querySelector('.mode-btn.active')?.dataset.mode === 'pvp';
+  pvpMode = document.getElementById('pvp-check').checked;
   overlay.style.display = 'none';
   startGame(mapPicker.value);
   canvas.requestPointerLock();

@@ -155,15 +155,13 @@
     #pvp-teams { font-size:17px; font-weight:bold; letter-spacing:1px; }
     #pvp-weapon { font-size:13px; color:#ffcc00; letter-spacing:1px; }
 
-    /* Mode selector */
-    #mode-grid { display:flex; gap:8px; }
-    .mode-btn {
-      background:#1a1a1a; border:2px solid #333; border-radius:8px;
-      cursor:pointer; padding:9px 18px; font-size:13px; color:#aaa;
-      transition:border-color .1s, color .1s, background .1s;
+    /* Mode toggle */
+    #pvp-toggle {
+      display:flex; align-items:center; gap:10px;
+      font-size:16px; font-weight:bold; letter-spacing:2px;
+      color:#aaa; cursor:pointer; user-select:none;
     }
-    .mode-btn:hover  { border-color:#00ffcc; color:#fff; }
-    .mode-btn.active { border-color:#00ffcc; color:#00ffcc; background:#0a2020; }
+    #pvp-check { width:20px; height:20px; cursor:pointer; accent-color:#00ffcc; }
 
     /* Carrying indicator */
     #carry-hint {
@@ -235,10 +233,7 @@
     </div>
   </div>
 
-  <div id="mode-grid">
-    <div class="mode-btn active" data-mode="normal">Normal</div>
-    <div class="mode-btn" data-mode="pvp">PVP</div>
-  </div>
+  <label id="pvp-toggle"><input type="checkbox" id="pvp-check"> PVP MODE</label>
   <button id="play-btn">PLAY</button>
 </div>
 
