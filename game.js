@@ -2242,9 +2242,9 @@ function updatePVPTeamHUD() {
 function checkPVPWin() {
   if (pvpOver) return;
   if (pvpRed.every(f=>f.dead)) {
-    pvpOver = true; showMessage('BLUE TEAM WINS!', 5000);
+    pvpOver = true; showMessage('BLUE TEAM WINS!', 5000); openElevator();
   } else if (pvpBlue.every(f=>f.dead) && player.dead) {
-    pvpOver = true; showMessage('RED TEAM WINS!', 5000);
+    pvpOver = true; showMessage('RED TEAM WINS!', 5000); openElevator();
   }
 }
 
