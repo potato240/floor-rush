@@ -1869,12 +1869,13 @@ function updatePVPFighter(f, dt) {
 
 function pvpPlayerAttack() {
   if (!pvpMode || player.dead || !player.weapon || player.weapon.cd > 0) return;
+  const aimDir = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
   if (player.weapon.type === 'pistol') {
     if (player.weapon.ammo <= 0) { showMessage('EMPTY!', 800); return; }
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
-    fireBullet(player.pos.clone().setY(0.8), dir, 'blue');
+    const firePos = player.pos.clone().add(aimDir.clone().multiplyScalar(0.6)).setY(0.8);
+    fireBullet(firePos, aimDir, 'blue');
     player.weapon.ammo--; player.weapon.cd = PVP_SHOOT_CD;
+    doFlash(0x88ccff, 0.1);
   } else {
     let hit = false;
     for (const f of pvpRed) {
@@ -1884,6 +1885,7 @@ function pvpPlayerAttack() {
     }
     if (!hit) showMessage('MISS', 600);
     player.weapon.cd = PVP_MELEE_CD;
+    doFlash(0xffaa00, 0.12);
   }
   updateWeaponHUD();
 }
@@ -1898,12 +1900,12 @@ function updatePVP(dt) {
     if (!hit) {
       const targets = b.team === 'blue' ? pvpRed : pvpBlue;
       for (const t of targets) {
-        if (!t.dead && b.mesh.position.distanceTo(t.mesh.position) < 0.9) {
+        if (!t.dead && Math.hypot(b.mesh.position.x-t.mesh.position.x, b.mesh.position.z-t.mesh.position.z) < 1.0) {
           damagePVPFighter(t); hit = true; break;
         }
       }
       if (!hit && b.team === 'red' && !player.dead &&
-          b.mesh.position.distanceTo(player.pos) < 0.9) {
+          Math.hypot(b.mesh.position.x-player.pos.x, b.mesh.position.z-player.pos.z) < 1.0) {
         damagePlayer(); hit = true;
       }
     }
