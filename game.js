@@ -275,43 +275,84 @@ const MAPS = {
 
 // ─── Polus map (generated) ────────────────────────────────────────────────────
 {
-  const R=34,C=52;
+  const R=36,C=54;
   const g=Array.from({length:R},()=>new Array(C).fill(1));
   const o=(r1,c1,r2,c2)=>{for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++)g[r][c]=0;};
-  o(1,19,7,31);   // Dropship
-  o(7,12,10,20);  // West corridor
-  o(9,19,12,28);  // Dropship south
-  o(7,30,10,38);  // East corridor
-  o(1,38,11,51);  // Laboratory
-  o(11,43,26,51); // Lab south corridor
-  o(11,1,17,9);   // Security
-  o(13,9,15,12);  // Security-Electrical connector
-  o(11,11,17,21); // Electrical
-  o(10,12,12,21); // West corridor connects to Electrical
-  o(11,22,12,27); // Electrical to Storage
-  o(11,27,19,37); // Storage
-  o(15,14,22,17); // Electrical to Communications corridor
-  o(21,11,27,23); // Communications
-  o(22,23,24,28); // Communications to Storage corridor
-  o(18,29,22,33); // Storage to Office corridor
-  o(20,27,29,43); // Office
-  o(21,43,26,45); // Office to Specimen corridor
-  o(26,44,33,51); // Specimen Room
-  o(29,39,33,44); // Decontamination
-  o(31,38,32,45); // Decon to Specimen connector
-  o(29,27,33,38); // Admin
-  o(20,1,25,9);   // O2 Upper
-  o(22,9,24,12);  // O2 to Communications
-  o(24,2,27,8);   // O2 vertical connector
-  o(26,1,31,9);   // O2 Lower
-  o(30,2,32,8);   // O2 Lower to Boiler
-  o(31,1,33,9);   // Boiler Room
-  o(26,14,29,17); // Communications to Weapons corridor
-  o(28,11,33,23); // Weapons
+
+  // Dropship (top centre)
+  o(1,20,8,32);
+  // Dropship south corridor → Storage
+  o(8,23,13,29);
+  // Dropship west arm → Electrical area
+  o(5,12,8,20);
+  // West arm north spur → Electrical top
+  o(8,9,12,12);
+  // Dropship east arm → Lab area
+  o(5,32,9,41);
+  // East arm → Lab connector
+  o(9,41,12,46);
+
+  // Security (far left)
+  o(12,1,18,6);
+  // Security–Electrical connector
+  o(14,6,16,7);
+  // Electrical
+  o(11,7,18,14);
+  // Electrical → Storage corridor
+  o(14,14,16,21);
+
+  // O2 Upper (adjacent below Security, naturally connected)
+  o(19,1,24,6);
+  // O2 Upper → Communications connector
+  o(21,6,22,12);
+  // O2 Upper–Lower connector
+  o(24,2,26,5);
+  // O2 Lower
+  o(25,1,30,6);
+  // O2 Lower → Boiler connector
+  o(30,2,32,5);
+  // Boiler Room
+  o(31,1,35,6);
+
+  // Communications
+  o(19,12,26,20);
+  // Communications → Storage connector
+  o(20,20,22,22);
+  // Communications → Weapons corridor
+  o(26,14,29,17);
+  // Weapons
+  o(29,10,35,21);
+
+  // Storage (centre, above Office)
+  o(13,21,19,31);
+  // Office Left (blue carpet)
+  o(19,21,28,30);
+  // Office Right (tan)
+  o(19,30,28,37);
+  // Office Right → Specimen Room corridor
+  o(22,37,24,47);
+
+  // Admin (below Office)
+  o(28,21,34,33);
+  // Admin → Decontamination bottom
+  o(32,30,35,35);
+
+  // Laboratory West
+  o(11,38,20,45);
+  // Laboratory East
+  o(8,45,20,52);
+  // Decontamination East (right side of Lab East)
+  o(13,52,20,53);
+
+  // Laboratory → Specimen Room corridor
+  o(20,46,23,52);
+  // Specimen Room (far right)
+  o(23,47,33,53);
+
   MAPS.polus2={
-    name:'POLUS',panelCount:14,
+    name:'POLUS', panelCount:14,
     colors:{floor:0x3d4f60,ceiling:0x0d1520,wall:0x253545,trim:0x80cbc4,light:0x88c8e8},
-    grid:g,spawn:{x:25,z:3},elevator:{x:32,z:31},
+    grid:g, spawn:{x:26,z:4}, elevator:{x:26,z:31},
   };
 }
 
