@@ -428,7 +428,7 @@
     <label class="mode-label"><input type="radio" name="gamemode" value="sus"> Sus</label>
   </div>
 
-  <div id="infect-settings" style="display:none;gap:24px;align-items:center;font-size:13px;letter-spacing:1px;color:#aaa;">
+  <div id="infect-settings" style="display:none;gap:24px;align-items:center;font-size:13px;letter-spacing:1px;color:#aaa;flex-wrap:wrap;justify-content:center;">
     <label style="display:flex;align-items:center;gap:8px;">
       NPCs
       <input id="npc-count-input" type="number" min="1" max="30" value="5"
@@ -438,6 +438,10 @@
       Starting infected
       <input id="infect-start-input" type="number" min="1" max="30" value="1"
         style="width:54px;background:#111;border:1px solid #333;color:#fff;padding:4px 6px;border-radius:6px;font-size:14px;text-align:center;">
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input id="infect-anim-checkbox" type="checkbox" checked style="width:16px;height:16px;accent-color:#00ffcc;cursor:pointer;">
+      Show animations
     </label>
   </div>
 
@@ -451,6 +455,6 @@
   }
 }
 </script>
-<script type="module" src="game.js?v=32"></script>
+<script type="module" src="game.js?v=33"></script>
 </body>
 </html>

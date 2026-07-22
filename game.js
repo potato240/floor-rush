@@ -611,6 +611,7 @@ canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpM
 // ─── Start ────────────────────────────────────────────────────────────────────
 let infectNpcCount   = 5;
 let infectStartCount = 1;
+let infectShowAnims  = true;
 
 document.querySelectorAll('input[name="gamemode"]').forEach(r => {
   r.addEventListener('change', () => {
@@ -635,6 +636,7 @@ playBtn.addEventListener('click', () => {
   if (infectionMode) {
     infectNpcCount   = Math.max(1, parseInt(document.getElementById('npc-count-input')?.value) || 5);
     infectStartCount = Math.max(1, parseInt(document.getElementById('infect-start-input')?.value) || 1);
+    infectShowAnims  = document.getElementById('infect-anim-checkbox')?.checked ?? true;
   }
   overlay.style.display = 'none';
   startGame(susMode ? 'polus2' : mapPicker.value);
@@ -2344,15 +2346,15 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     tintInfected(player.mesh);
     if (activeMinigame) cancelMinigame();
     spawnInfectPuddle(player.pos.x, player.pos.z);
-    if (isFirst) showInfectCutscene();
-    else if (attacker && !csActive) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
+    if (isFirst && infectShowAnims) showInfectCutscene();
+    else if (attacker && !csActive && infectShowAnims) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
     else doFlash(0x00ff44, 0.7);
   } else {
     if (entity.infected) return;
     entity.infected = true;
     entity.infectLockout = 15;
     tintInfected(entity.mesh);
-    entity.infectAnim = { t: 0 };
+    if (infectShowAnims) entity.infectAnim = { t: 0 };
     spawnInfectPuddle(entity.mesh.position.x, entity.mesh.position.z);
   }
   updateInfectionHUD();
