@@ -2312,6 +2312,7 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     entity.infected = true;
     entity.infectLockout = 15;
     tintInfected(entity.mesh);
+    entity.infectAnim = { t: 0 }; // trigger in-world fall/roar animation
   }
   updateInfectionHUD();
   checkInfectionEnd();
@@ -2447,6 +2448,7 @@ function updateInfection(dt) {
 
   for (const npc of npcs) {
     if (!npc.infected || npc.dead) continue;
+    if (npc.infectAnim) continue; // frozen during fall/roar animation
     npc.damageCooldown = Math.max(0, (npc.damageCooldown || 0) - dt);
     if (npc.infectLockout > 0) { npc.infectLockout -= dt; continue; }
 
@@ -2484,8 +2486,44 @@ function updateInfection(dt) {
     }
   }
 
+  // In-world fall/roar animation for newly infected NPCs
+  updateInfectAnims(dt);
+
   // Green footprint trail for all infected entities
   updateFootprints(dt);
+}
+
+function updateInfectAnims(dt) {
+  const ease = v => v < 0.5 ? 2*v*v : 1 - Math.pow(-2*v+2,2)/2;
+  for (const npc of npcs) {
+    if (!npc.infectAnim) continue;
+    npc.infectAnim.t += dt;
+    const ct = npc.infectAnim.t;
+    const m = npc.mesh;
+    const fallT  = Math.max(0, Math.min(1, ct / 0.7));
+    const riseT  = Math.max(0, Math.min(1, (ct - 0.7) / 0.9));
+    const roarT  = Math.max(0, Math.min(1, (ct - 1.6) / 1.2));
+
+    if (roarT > 0) {
+      m.rotation.z = Math.sin(ct * 28) * roarT * 0.18;
+      m.position.y = -0.2 + 0.2 * Math.min(1, roarT * 2);
+    } else if (riseT > 0) {
+      const e = ease(riseT);
+      m.rotation.z = -Math.PI / 2 * (1 - e);
+      m.position.y = -0.5 + 0.3 * e;
+    } else {
+      const e = ease(fallT);
+      m.rotation.z = -Math.PI / 2 * e;
+      m.position.y = -0.5 * e;
+    }
+
+    if (ct >= 2.8) {
+      // reset pose and clear anim
+      m.rotation.z = 0;
+      m.position.y = 0;
+      npc.infectAnim = null;
+    }
+  }
 }
 
 const FOOTPRINT_INTERVAL = 0.18; // seconds between prints
