@@ -1985,7 +1985,7 @@ function updatePlayer(dt) {
   // Camera
   if (firstPerson) {
     if (player.mesh) player.mesh.visible = false;
-    const eyeY = player.pos.y + 1.1;
+    const eyeY = player.pos.y + 1.0;
     camera.position.set(player.pos.x, eyeY, player.pos.z);
     // Use lookAt so rotation is always correct regardless of camYaw value
     const lookTarget3D = new THREE.Vector3(
