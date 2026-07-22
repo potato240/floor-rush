@@ -2946,9 +2946,8 @@ function updateInfection(dt) {
     }
 
     if (nearDist < INFECT_RANGE && npc.damageCooldown <= 0) {
-        infectEntity(nearEntity, false, npc);
-        npc.damageCooldown = 1.5;
-      }
+      infectEntity(nearEntity, false, npc);
+      npc.damageCooldown = 1.5;
     }
   }
 
