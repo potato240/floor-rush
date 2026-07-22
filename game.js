@@ -2536,7 +2536,7 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     entity.infected = true;
     entity.infectLockout = 15;
     tintInfected(entity.mesh);
-    if (infectShowAnims) entity.infectAnim = { t: 0 };
+    entity.infectAnim = { t: 0 };
     spawnInfectPuddle(entity.mesh.position.x, entity.mesh.position.z);
   }
   updateInfectionHUD();
