@@ -54,13 +54,15 @@ const AU_COLORS = [
   { name:'Rose',    hex:0xff63d4 },
   { name:'Banana',  hex:0xffff7a },
   { name:'Olive',   hex:0x847a37 },
-  { name:'Army',    hex:0x6b8c00 },
+  { name:'Army',     hex:0x6b8c00 },
+  { name:'Infected', hex:0x33bb44 },
 ];
 
 // ─── Mouth definitions ────────────────────────────────────────────────────────
 const MOUTHS = [
-  { id:'none',   label:'None',   icon:'🚫' },
-  { id:'zigzag', label:'Zigzag', icon:'〰️' },
+  { id:'none',       label:'None',        icon:'🚫' },
+  { id:'zigzag',     label:'Zigzag',      icon:'〰️' },
+  { id:'greenvisor', label:'Green Visor', icon:'🟢' },
 ];
 
 // ─── Hat definitions ──────────────────────────────────────────────────────────
@@ -1095,84 +1097,221 @@ function buildRooftopGeometry() {
   const bldgs = mapDef.rooftopBuildings;
   if (!bldgs) return;
 
+  // Heights by building index for slant calculations
+  const bldgH = {};
+  bldgs.forEach((b, i) => { bldgH[i] = b.h; });
+
   for (const b of bldgs) {
     const wx = (b.c1 + b.c2 + 1) / 2 * TILE;
     const wz = (b.r1 + b.r2 + 1) / 2 * TILE;
     const ww = (b.c2 - b.c1 + 1) * TILE;
     const wd = (b.r2 - b.r1 + 1) * TILE;
 
-    // Building sides (four walls below the roof, giving height impression)
-    const sideMat = new THREE.MeshLambertMaterial({ color: b.color });
-    const darkMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.55) });
+    const sideMat  = new THREE.MeshLambertMaterial({ color: b.color });
+    const darkMat  = new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.45) });
+    const lightMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color).multiplyScalar(1.25) });
 
-    // Front / back
-    for (const [dz, mat] of [[wd/2, darkMat],[-wd/2, sideMat]]) {
-      const face = new THREE.Mesh(new THREE.BoxGeometry(ww, b.h, 0.3), mat);
-      face.position.set(wx, -b.h/2, wz + dz);
+    // Building sides — solid faces
+    for (const [dz, mat] of [[wd/2, darkMat], [-wd/2, sideMat]]) {
+      const face = new THREE.Mesh(new THREE.BoxGeometry(ww, b.h, 0.25), mat);
+      face.position.set(wx, -b.h / 2, wz + dz);
       scene.add(face);
     }
-    // Left / right
-    for (const [dx, mat] of [[ww/2, darkMat],[-ww/2, sideMat]]) {
-      const face = new THREE.Mesh(new THREE.BoxGeometry(0.3, b.h, wd), mat);
-      face.position.set(wx + dx, -b.h/2, wz);
+    for (const [dx, mat] of [[ww/2, darkMat], [-ww/2, sideMat]]) {
+      const face = new THREE.Mesh(new THREE.BoxGeometry(0.25, b.h, wd), mat);
+      face.position.set(wx + dx, -b.h / 2, wz);
       scene.add(face);
     }
 
-    // Roof edge trim / parapet
-    const trimMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color).multiplyScalar(1.3).getHex() });
-    for (const [axis,pos,sz] of [
-      ['x', [wx, 0.15, wz+wd/2], [ww+0.3,0.3,0.3]],
-      ['x', [wx, 0.15, wz-wd/2], [ww+0.3,0.3,0.3]],
-      ['z', [wx+ww/2, 0.15, wz], [0.3,0.3,wd]],
-      ['z', [wx-ww/2, 0.15, wz], [0.3,0.3,wd]],
+    // Window rows on building sides (neon glow rectangles)
+    const winColors = [0x88ccff, 0xffcc44, 0xff6644, 0x44ffcc];
+    const winColor  = winColors[Math.floor(Math.random() * winColors.length)];
+    const winMat    = new THREE.MeshBasicMaterial({ color: winColor });
+    const winRows   = Math.max(1, Math.floor(b.h / 1.4));
+    const winCols   = Math.max(2, Math.floor(ww / 3.5));
+    for (let row = 0; row < winRows; row++) {
+      for (let col = 0; col < winCols; col++) {
+        const wy = -(b.h - 0.7) + row * (b.h / winRows);
+        const step = ww / (winCols + 1);
+        const win  = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.05), winMat);
+        win.position.set(wx - ww/2 + step * (col + 1), wy, wz + wd/2 + 0.1);
+        scene.add(win);
+      }
+    }
+
+    // Parapet (raised roof edge)
+    const parapetMat = new THREE.MeshLambertMaterial({ color: lightMat.color });
+    const parapetH   = 0.45;
+    for (const [pos, sz] of [
+      [[wx,         0.22, wz + wd/2 + 0.07], [ww + 0.4, parapetH, 0.35]],
+      [[wx,         0.22, wz - wd/2 - 0.07], [ww + 0.4, parapetH, 0.35]],
+      [[wx + ww/2 + 0.07, 0.22, wz],         [0.35, parapetH, wd + 0.4]],
+      [[wx - ww/2 - 0.07, 0.22, wz],         [0.35, parapetH, wd + 0.4]],
     ]) {
-      const parapet = new THREE.Mesh(new THREE.BoxGeometry(...sz), trimMat);
-      parapet.position.set(...pos);
-      scene.add(parapet);
+      const p = new THREE.Mesh(new THREE.BoxGeometry(...sz), parapetMat);
+      p.position.set(...pos);
+      scene.add(p);
     }
 
-    // Rooftop details: AC unit or vent box on each building
-    const detailMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.8), detailMat);
-    box.position.set(wx + ww*0.28, 0.4, wz - wd*0.28);
-    scene.add(box);
+    // Parapet top cap (lighter strip)
+    const capMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(b.color).multiplyScalar(1.6) });
+    for (const [pos, sz] of [
+      [[wx,         0.46, wz + wd/2 + 0.07], [ww + 0.4, 0.08, 0.38]],
+      [[wx,         0.46, wz - wd/2 - 0.07], [ww + 0.4, 0.08, 0.38]],
+      [[wx + ww/2 + 0.07, 0.46, wz],         [0.38, 0.08, wd + 0.4]],
+      [[wx - ww/2 - 0.07, 0.46, wz],         [0.38, 0.08, wd + 0.4]],
+    ]) {
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(...sz), capMat);
+      cap.position.set(...pos);
+      scene.add(cap);
+    }
+
+    // AC unit clusters
+    const acMat   = new THREE.MeshLambertMaterial({ color: 0x777788 });
+    const acDark  = new THREE.MeshLambertMaterial({ color: 0x444455 });
+    const acCount = 1 + Math.floor(ww * wd / 120);
+    for (let i = 0; i < acCount; i++) {
+      const ox = -ww * 0.3 + (i % 2) * ww * 0.45;
+      const oz = -wd * 0.25 + Math.floor(i / 2) * wd * 0.45;
+      const grp = new THREE.Group();
+      grp.position.set(wx + ox, 0, wz + oz);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 1.0), acMat);
+      base.position.y = 0.25;
+      grp.add(base);
+      const fan = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.15, 8), acDark);
+      fan.position.set(0, 0.57, 0);
+      grp.add(fan);
+      scene.add(grp);
+    }
+
+    // Water tower on tallest + second tallest buildings
+    if (b.h >= 4.5) {
+      const ttMat  = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
+      const ttDark = new THREE.MeshLambertMaterial({ color: 0x5c4410 });
+      const ttGrp  = new THREE.Group();
+      ttGrp.position.set(wx + ww * 0.3, 0, wz + wd * 0.3);
+      // Tank
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.4, 10), ttMat);
+      tank.position.y = 2.1;
+      ttGrp.add(tank);
+      // Legs
+      for (let leg = 0; leg < 4; leg++) {
+        const angle = (leg / 4) * Math.PI * 2;
+        const legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 0.12), ttDark);
+        legMesh.position.set(Math.cos(angle) * 0.55, 0.9, Math.sin(angle) * 0.55);
+        ttGrp.add(legMesh);
+      }
+      scene.add(ttGrp);
+    }
+
+    // Antenna / comm tower on tall buildings
+    if (b.h >= 3.5) {
+      const antMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+      const redMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+      const antGrp = new THREE.Group();
+      antGrp.position.set(wx - ww * 0.3, 0, wz - wd * 0.3);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.0, 6), antMat);
+      pole.position.y = 1.0;
+      antGrp.add(pole);
+      const blink = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), redMat);
+      blink.position.y = 2.1;
+      antGrp.add(blink);
+      // Cross arms
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.04, 0.04), antMat);
+      arm.position.y = 1.6;
+      antGrp.add(arm);
+      scene.add(antGrp);
+      // Blinking point light at antenna tip
+      const blink_light = new THREE.PointLight(0xff2200, 1.2, 8);
+      blink_light.position.set(wx - ww * 0.3, 2.2, wz - wd * 0.3);
+      scene.add(blink_light);
+    }
+
+    // Neon trim accent line along one edge
+    const neonColors = [0x00ffff, 0xff00aa, 0x44ff00, 0xffaa00];
+    const neonColor  = neonColors[bldgs.indexOf(b) % neonColors.length];
+    const neonMat    = new THREE.MeshBasicMaterial({ color: neonColor });
+    const neon = new THREE.Mesh(new THREE.BoxGeometry(ww * 0.8, 0.06, 0.06), neonMat);
+    neon.position.set(wx, 0.03, wz + wd / 2 + 0.1);
+    scene.add(neon);
+    const neonLight = new THREE.PointLight(neonColor, 1.5, 12);
+    neonLight.position.set(wx, 0.5, wz + wd / 2);
+    scene.add(neonLight);
   }
 
-  // Slanted planks (visual only — angled boxes over the plank corridors)
-  const plankMat = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
-  const planks = [
-    // A↔B: horizontal at moderate height
-    { x:(13+21)/2*TILE+TILE/2, z: 4.5*TILE+TILE/2, w:9*TILE, d:2*TILE, tiltZ:0.18, ry:0 },
-    // A↔E: slopes down
-    { x: 10*TILE+TILE/2, z: 9.5*TILE+TILE/2, w: 7*TILE, d:2*TILE, tiltZ:0.22, ry:Math.PI/2 },
-    // B↔E: slopes down
-    { x: 22*TILE+TILE/2, z: 10*TILE+TILE/2, w: 5*TILE, d:2*TILE, tiltZ:0.20, ry:0 },
-    // E↔C: slopes down
-    { x: 9*TILE+TILE/2,  z: 19.5*TILE+TILE/2, w: 9*TILE, d:2*TILE, tiltZ:0.25, ry:Math.PI/2 },
-    // E↔D: slopes down
-    { x: 26.5*TILE+TILE/2, z: 19.5*TILE+TILE/2, w: 6*TILE, d:2*TILE, tiltZ:0.20, ry:Math.PI/2 },
-  ];
-  for (const p of planks) {
-    const plank = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.18, p.d), plankMat);
-    plank.position.set(p.x, -0.1, p.z);
-    plank.rotation.y = p.ry;
-    plank.rotation.z = p.tiltZ;
-    scene.add(plank);
-    // Plank side rails
+  // ── Slanted planks ──────────────────────────────────────────────────────
+  // Heights: A=3.0, B=6.0, E=4.5, C=2.5, D=4.0
+  const plankBaseMat  = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
+  const plankDarkMat  = new THREE.MeshLambertMaterial({ color: 0x5c4210 });
+  const railMat       = new THREE.MeshLambertMaterial({ color: 0x6b5010 });
+
+  function addPlank(x, z, lengthAxis, length, width, hA, hB) {
+    // lengthAxis: 'x' or 'z'
+    // hA = height at lower coord end, hB = height at higher coord end
+    const tilt = Math.atan2(hB - hA, length) * 0.6; // soften visual tilt
+    const grp  = new THREE.Group();
+    grp.position.set(x, -0.06, z);
+    if (lengthAxis === 'z') grp.rotation.y = Math.PI / 2;
+
+    // Plank base
+    const base = new THREE.Mesh(new THREE.BoxGeometry(length, 0.18, width), plankBaseMat);
+    base.rotation.z = tilt;
+    grp.add(base);
+
+    // Slat boards across width
+    const slatCount = Math.floor(length / 0.9);
+    for (let i = 0; i < slatCount; i++) {
+      const t = (i / (slatCount - 1)) - 0.5;
+      const slat = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, width + 0.08), plankDarkMat);
+      slat.position.x = t * length;
+      slat.rotation.z = tilt;
+      grp.add(slat);
+    }
+
+    // Side rails
     for (const side of [-1, 1]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.25, 0.1), plankMat);
-      rail.position.set(p.x, 0.2, p.z + side*(p.d/2 - 0.05));
-      rail.rotation.y = p.ry;
-      rail.rotation.z = p.tiltZ;
-      scene.add(rail);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(length + 0.1, 0.22, 0.1), railMat);
+      rail.position.set(0, 0.2, side * (width / 2 + 0.05));
+      rail.rotation.z = tilt;
+      grp.add(rail);
+      // Rail posts
+      const postCount = Math.ceil(length / 2.5);
+      for (let p = 0; p <= postCount; p++) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.38, 0.08), railMat);
+        post.position.set((p / postCount - 0.5) * length, 0.1, side * (width / 2 + 0.05));
+        grp.add(post);
+      }
     }
+
+    // Rope/cable along center
+    const cableMat = new THREE.MeshBasicMaterial({ color: 0x333322 });
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, length * 1.05, 4), cableMat);
+    cable.rotation.z = Math.PI / 2 + tilt;
+    cable.position.y = 0.38;
+    grp.add(cable);
+
+    scene.add(grp);
   }
 
-  // Night-sky atmosphere: dim blue ambient
-  scene.add(new THREE.AmbientLight(0x0a1020, 0.4));
-  // City glow from below
-  const cityGlow = new THREE.HemisphereLight(0x203060, 0xff8800, 0.6);
+  // A↔B (rows 4-5, cols 13-21): runs along X; A=3.0 at left, B=6.0 at right
+  addPlank((13 + 21 + 1) / 2 * TILE, (4 + 5 + 1) / 2 * TILE, 'x', 9 * TILE, 2 * TILE, 3.0, 6.0);
+  // A↔E (rows 9-10, cols 7-13): runs along Z; A=3.0 at top, E=4.5 at bottom
+  addPlank((7 + 13 + 1) / 2 * TILE, (9 + 10 + 1) / 2 * TILE, 'z', 2 * TILE, 7 * TILE, 3.0, 4.5);
+  // B↔E (row 10, cols 20-24): runs along X; E=4.5 at left, B=6.0 at right
+  addPlank((20 + 24 + 1) / 2 * TILE, 10.5 * TILE, 'x', 5 * TILE, 1 * TILE, 4.5, 6.0);
+  // E↔C (rows 19-20, cols 5-13): runs along Z; E=4.5 at top, C=2.5 at bottom
+  addPlank((5 + 13 + 1) / 2 * TILE, (19 + 20 + 1) / 2 * TILE, 'z', 2 * TILE, 9 * TILE, 4.5, 2.5);
+  // E↔D (rows 19-20, cols 24-29): runs along Z; E=4.5 at top, D=4.0 at bottom
+  addPlank((24 + 29 + 1) / 2 * TILE, (19 + 20 + 1) / 2 * TILE, 'z', 2 * TILE, 6 * TILE, 4.5, 4.0);
+
+  // ── Atmosphere ──────────────────────────────────────────────────────────
+  scene.add(new THREE.AmbientLight(0x08101a, 0.5));
+  const cityGlow = new THREE.HemisphereLight(0x1a2a50, 0xff6600, 0.7);
   scene.add(cityGlow);
+  // Moon-ish key light
+  const moon = new THREE.DirectionalLight(0xaabbcc, 0.5);
+  moon.position.set(-20, 30, -10);
+  scene.add(moon);
 }
 
 // ─── Crewmate mesh ────────────────────────────────────────────────────────────
@@ -1187,12 +1326,16 @@ function makeMouth(id) {
     const startX = -(n * spanX) / 2;
     for (let i = 0; i < n; i++) {
       const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.018, 0.018), mat);
-      // All centers at same y so segments meet flush at their endpoints
       seg.position.set(startX + (i + 0.5) * spanX, 0.645, 0.315);
-      // i=0 goes down-right (starts high), i=1 goes up-right, alternating
       seg.rotation.z = i % 2 === 0 ? -angle : angle;
       grp.add(seg);
     }
+  }
+  if (id === 'greenvisor') {
+    const mat = new THREE.MeshBasicMaterial({ color: 0x33ee55, transparent: true, opacity: 0.9 });
+    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8, 0.2, 2.6, 0.4, 1.2), mat);
+    visor.position.set(0, 0.8, 0.18);
+    grp.add(visor);
   }
   return grp;
 }
