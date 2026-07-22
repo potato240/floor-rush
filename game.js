@@ -2104,8 +2104,8 @@ function updateCutscene(dt) {
     const shake = infectT < 0.8 && fallT === 0 ? Math.sin(ct * 45) * infectT * 0.07 : 0;
 
     if (roarT > 0) {
-      // Stay in profile, shake, open side mouth
-      playerMesh.rotation.y = -Math.PI / 2;
+      // Turn to face camera so front-face mouth is visible; shake
+      playerMesh.rotation.y = 0;
       playerMesh.rotation.z = Math.sin(ct * 28) * roarT * 0.1;
       playerMesh.position.set(1.3, -0.18, 0);
       if (roarMouth) { const o = Math.min(1, roarT * 3); roarMouth.scale.set(o, o, 1); }
@@ -2144,9 +2144,9 @@ function updateCutscene(dt) {
     }
 
     if (roarT > 0) {
-      // Zoom in on the profile from the side
+      // Zoom in from front as player faces camera
       const z = Math.min(1, roarT * 1.5);
-      csCamera.position.set(0, 1.0 + z * 0.1, 4.2 - z * 1.2);
+      csCamera.position.set(1.3, 0.75 + z * 0.15, 4.2 - z * 2.0);
       csCamera.lookAt(1.3, 0.75, 0);
     } else if (riseT > 0) {
       csCamera.position.set(0, 1.1, 3.8);
@@ -2354,13 +2354,12 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
   tongueMesh.scale.x = 0.001;
   csScene.add(tongueMesh);
 
-  // Roar mouth — on the local +X face (camera-facing side in profile rotation.y=-PI/2).
-  // MeshBasicMaterial keeps it pure black and excludes it from the green tint traverse.
+  // Roar mouth — on the front face of the head, visible when rotation.y=0 (facing camera).
   const roarMouth = new THREE.Mesh(
-    new THREE.BoxGeometry(0.07, 0.20, 0.28),
+    new THREE.BoxGeometry(0.34, 0.21, 0.07),
     new THREE.MeshBasicMaterial({ color: 0x000000 })
   );
-  roarMouth.position.set(0.315, 0.74, 0);
+  roarMouth.position.set(0, 0.70, 0.33);
   roarMouth.scale.set(0, 0, 1);
   playerMesh.add(roarMouth);
 
