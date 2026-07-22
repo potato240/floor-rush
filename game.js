@@ -508,7 +508,7 @@ function resize() {
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
-let scene, mapDef, floorNum = 1;
+let scene, mapDef, currentMapKey, floorNum = 1;
 let player = { pos: new THREE.Vector3(), angle: 0, mesh: null, speed: 0, hp: 3, dead: false, damageCooldown: 0, carrying: null };
 let camYaw = Math.PI, camPitch = 0.18;
 let firstPerson = false;
@@ -658,6 +658,7 @@ function loadMap(mapKey) {
   scene = new THREE.Scene();
 
   mapDef = MAPS[mapKey];
+  currentMapKey = mapKey;
   _openCells = null;
   currentGrid = null;
   panels = [];
@@ -2299,7 +2300,7 @@ function tintInfected(mesh) {
 
 function spawnInfectPuddle(x, z) {
   const geo = new THREE.CircleGeometry(0.9 + Math.random() * 0.4, 18);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x22cc44, transparent: true, opacity: 0.55 });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x22cc44, transparent: true, opacity: 1.0 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, 0.015, z);
@@ -2425,7 +2426,15 @@ function updateInfectionHUD() {
 function checkInfectionEnd() {
   if (infectionOver) return;
   const allInfected = playerInfected && npcs.every(n => n.infected || n.dead);
-  if (allInfected) { infectionOver = true; showMessage('ALL INFECTED — YOU LOSE!', 5000); }
+  if (allInfected) {
+    infectionOver = true;
+    showMessage('ALL INFECTED', 4500);
+    setTimeout(() => {
+      const mapKeys = Object.keys(MAPS);
+      const next = mapKeys[(mapKeys.indexOf(currentMapKey) + 1) % mapKeys.length];
+      loadMap(next);
+    }, 5000);
+  }
 }
 
 function updateInfection(dt) {
@@ -2575,7 +2584,7 @@ function updateFootprints(dt) {
     const fp = footprints[i];
     fp.life -= dt;
     const maxLife = fp.maxLife || FOOTPRINT_LIFE;
-    const maxOpacity = fp.maxLife ? 0.55 : 0.75;
+    const maxOpacity = fp.maxLife ? 1.0 : 0.75;
     fp.mesh.material.opacity = Math.max(0, (fp.life / maxLife) * maxOpacity);
     if (fp.life <= 0) {
       scene.remove(fp.mesh);
