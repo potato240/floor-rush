@@ -557,6 +557,7 @@ const INFECT_NPC_SPEED  = NPC_SPEED;
 let infectionMode      = false;
 let playerInfected     = false;
 let footprints         = []; // { mesh, life } green trail marks left by infected
+let puddles            = []; // permanent green puddles at infection sites (cleared on map change)
 let playerInfectLockout = 0;
 let activeMinigame     = null;
 let infectionOver      = false;
@@ -675,6 +676,8 @@ function loadMap(mapKey) {
   deadHeads = [];
   for (const fp of footprints) scene.remove(fp.mesh);
   footprints = [];
+  for (const m of puddles) scene.remove(m);
+  puddles = [];
   lookTarget = null;
 
   const bgColor = 0x0d0d14;
@@ -2300,12 +2303,12 @@ function tintInfected(mesh) {
 
 function spawnInfectPuddle(x, z) {
   const geo = new THREE.CircleGeometry(0.9 + Math.random() * 0.4, 18);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x22cc44, transparent: true, opacity: 1.0 });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x22cc44 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, 0.015, z);
   scene.add(mesh);
-  footprints.push({ mesh, life: 12, maxLife: 12 });
+  puddles.push(mesh);
 }
 
 function infectEntity(entity, isFirst = false, attacker = null) {
@@ -2583,9 +2586,7 @@ function updateFootprints(dt) {
   for (let i = footprints.length - 1; i >= 0; i--) {
     const fp = footprints[i];
     fp.life -= dt;
-    const maxLife = fp.maxLife || FOOTPRINT_LIFE;
-    const maxOpacity = fp.maxLife ? 1.0 : 0.75;
-    fp.mesh.material.opacity = Math.max(0, (fp.life / maxLife) * maxOpacity);
+    fp.mesh.material.opacity = Math.max(0, (fp.life / FOOTPRINT_LIFE) * 0.75);
     if (fp.life <= 0) {
       scene.remove(fp.mesh);
       footprints.splice(i, 1);
