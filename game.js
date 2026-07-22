@@ -2704,7 +2704,7 @@ function spawnInfectPuddle(x, z) {
 function spawnLockoutFog(x, z) {
   if (playerLockoutFog) { scene.remove(playerLockoutFog.mesh); playerLockoutFog = null; }
   const geo = new THREE.CircleGeometry(1.1, 32);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x22dd55, transparent: true, opacity: 0.3, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x22dd55, transparent: true, opacity: 1.0, depthWrite: false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, 0.02, z);
@@ -2893,19 +2893,19 @@ function updateInfection(dt) {
     if (fog.phase === 'closing') {
       const p = Math.min(1, fog.t / 0.5);
       fog.mesh.scale.setScalar(3 - p * 2); // 3 → 1
-      fog.mesh.material.opacity = 0.3;
+      fog.mesh.material.opacity = 1.0;
       if (p >= 1) { fog.phase = 'idle'; fog.t = 0; }
 
     } else if (fog.phase === 'idle') {
       fog.mesh.scale.setScalar(1);
-      fog.mesh.material.opacity = 0.3;
+      fog.mesh.material.opacity = 1.0;
       // Switch to opening when lockout ends
       if (playerInfectLockout <= 0) { fog.phase = 'opening'; fog.t = 0; }
 
     } else if (fog.phase === 'opening') {
       const p = Math.min(1, fog.t / 3.0);
       fog.mesh.scale.setScalar(1 + p * 4); // 1 → 5
-      fog.mesh.material.opacity = 0.3 * (1 - p);
+      fog.mesh.material.opacity = 1 - p;
       if (p >= 1) { scene.remove(fog.mesh); playerLockoutFog = null; }
     }
   }
