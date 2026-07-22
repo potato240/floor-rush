@@ -2347,7 +2347,7 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     if (activeMinigame) cancelMinigame();
     spawnInfectPuddle(player.pos.x, player.pos.z);
     if (isFirst && infectShowAnims) showInfectCutscene();
-    else if (attacker && !csActive && infectShowAnims) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
+    else if (infectShowAnims) { player.infectAnim = { t: 0 }; }
     else doFlash(0x00ff44, 0.7);
   } else {
     if (entity.infected) return;
@@ -2547,14 +2547,15 @@ function updateInfection(dt) {
 
 function updateInfectAnims(dt) {
   const ease = v => v < 0.5 ? 2*v*v : 1 - Math.pow(-2*v+2,2)/2;
-  for (const npc of npcs) {
-    if (!npc.infectAnim) continue;
-    npc.infectAnim.t += dt;
-    const ct = npc.infectAnim.t;
-    const m = npc.mesh;
-    const fallT  = Math.max(0, Math.min(1, ct / 0.7));
-    const riseT  = Math.max(0, Math.min(1, (ct - 0.7) / 0.9));
-    const roarT  = Math.max(0, Math.min(1, (ct - 1.6) / 1.2));
+  const entities = [...npcs, player];
+  for (const ent of entities) {
+    if (!ent.infectAnim) continue;
+    ent.infectAnim.t += dt;
+    const ct = ent.infectAnim.t;
+    const m = ent.mesh;
+    const fallT = Math.max(0, Math.min(1, ct / 0.7));
+    const riseT = Math.max(0, Math.min(1, (ct - 0.7) / 0.9));
+    const roarT = Math.max(0, Math.min(1, (ct - 1.6) / 1.2));
 
     if (roarT > 0) {
       m.rotation.z = Math.sin(ct * 28) * roarT * 0.18;
@@ -2570,10 +2571,9 @@ function updateInfectAnims(dt) {
     }
 
     if (ct >= 2.8) {
-      // reset pose and clear anim
       m.rotation.z = 0;
       m.position.y = 0;
-      npc.infectAnim = null;
+      ent.infectAnim = null;
     }
   }
 }
