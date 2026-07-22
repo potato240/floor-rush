@@ -1929,9 +1929,7 @@ function updatePlayer(dt) {
     for (const trap of trapCells) {
       trap.cooldown = Math.max(0, trap.cooldown - dt);
       if (trap.cooldown<=0 && Math.hypot(player.pos.x-trap.pos.x, player.pos.z-trap.pos.z) < TILE*0.38) {
-        if (infectionMode && !playerInfected) {
-          infectEntity('player', false, null);
-        } else if (!infectionMode) {
+        if (!infectionMode) {
           damagePlayer();
         }
         trap.cooldown = TRAP_DMG_CD;
