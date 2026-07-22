@@ -603,6 +603,7 @@ let ventSelection = null; // { def, options:[id,...], idx } when vent UI is open
 // ─── Infection state ──────────────────────────────────────────────────────────
 const INFECT_RANGE      = 1.1;
 const INFECT_NPC_SPEED  = NPC_SPEED;
+const INFECT_SIGHT      = 10;  // world units — how close before infected NPC spots a survivor
 let infectionMode      = false;
 let playerInfected     = false;
 let footprints         = []; // { mesh, life } green trail marks left by infected
@@ -2906,14 +2907,41 @@ function updateInfection(dt) {
       if (d < nearDist) { nearDist = d; nearPos = other.mesh.position; nearEntity = other; }
     }
 
-    if (nearPos) {
+    // Only chase if within sight range — otherwise wander
+    const spotted = nearPos && nearDist < INFECT_SIGHT;
+    if (spotted) {
+      npc.lastKnownTarget = nearPos.clone();
+      npc.wanderTimer = 0;
+    }
+
+    if (spotted || npc.lastKnownTarget) {
+      const target = spotted ? nearPos : npc.lastKnownTarget;
       npc.pathTimer = (npc.pathTimer || 0) - dt;
       if (npc.pathTimer <= 0 || npc.path.length === 0) {
-        npcComputePath(npc, nearPos.x, nearPos.z);
+        npcComputePath(npc, target.x, target.z);
         npc.pathTimer = 0.5 + Math.random() * 0.3;
       }
       npcFollowPath(npc, dt, 0, INFECT_NPC_SPEED);
-      if (nearDist < INFECT_RANGE && npc.damageCooldown <= 0) {
+      // Reached last known position without finding anyone — start wandering
+      if (!spotted && npc.path.length === 0) npc.lastKnownTarget = null;
+    } else {
+      // Wander randomly
+      npc.wanderTimer = (npc.wanderTimer || 0) - dt;
+      if (npc.wanderTimer <= 0 || npc.path.length === 0) {
+        const g = mapDef.grid, rows = g.length, cols = g[0].length;
+        let rx, rz;
+        do {
+          const r = Math.floor(Math.random() * rows);
+          const c = Math.floor(Math.random() * cols);
+          rx = c * TILE + TILE / 2; rz = r * TILE + TILE / 2;
+        } while (g[Math.floor(rz / TILE)]?.[Math.floor(rx / TILE)] !== 0);
+        npcComputePath(npc, rx, rz);
+        npc.wanderTimer = 2 + Math.random() * 3;
+      }
+      npcFollowPath(npc, dt, 0, INFECT_NPC_SPEED * 0.7);
+    }
+
+    if (nearDist < INFECT_RANGE && npc.damageCooldown <= 0) {
         infectEntity(nearEntity, false, npc);
         npc.damageCooldown = 1.5;
       }
