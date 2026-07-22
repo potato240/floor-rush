@@ -2701,10 +2701,10 @@ function spawnInfectPuddle(x, z) {
 
 function spawnLockoutFog(x, z) {
   if (playerLockoutFog) { scene.remove(playerLockoutFog.mesh); playerLockoutFog = null; }
-  const geo = new THREE.CylinderGeometry(1.1, 1.1, 0.5, 32);
+  const geo = new THREE.CylinderGeometry(1.1, 1.1, 2.0, 32);
   const mat = new THREE.MeshBasicMaterial({ color: 0x22dd55, transparent: true, opacity: 1.0 });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 0.25, z);
+  mesh.position.set(x, 1.0, z);
   mesh.scale.setScalar(3); // starts large, closes in
   scene.add(mesh);
   playerLockoutFog = { mesh, phase: 'closing', t: 0 };
