@@ -3349,6 +3349,7 @@ function updateSusHUD() {
 
 function updateSus(dt) {
   if (susOver) return;
+  updateMinigame(dt);
   if (susKillCd > 0) susKillCd = Math.max(0, susKillCd - dt);
   if (susSabotage) {
     susSabotage.timer -= dt;
