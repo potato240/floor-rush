@@ -1350,7 +1350,7 @@ function makeMouth(id) {
   }
   if (id === 'gvisor-infected') {
     // Small fangs / infected drip below the visor
-    const fangMat = new THREE.MeshBasicMaterial({ color: 0x114422 });
+    const fangMat = new THREE.MeshBasicMaterial({ color: 0x0a2a10 });
     for (const fx of [-0.09, 0, 0.09]) {
       const fang = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.01, 0.22, 5), fangMat);
       fang.position.set(fx, 0.57, 0.30);
