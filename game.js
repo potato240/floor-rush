@@ -609,11 +609,33 @@ canvas.addEventListener('click', () => { if (!locked && !susMeeting) canvas.requ
 canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpMode) pvpPlayerAttack(); });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+let infectNpcCount   = 5;
+let infectStartCount = 1;
+
+document.querySelectorAll('input[name="gamemode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const s = document.getElementById('infect-settings');
+    if (s) s.style.display = r.value === 'infection' && r.checked ? 'flex' : (s.style.display === 'flex' && r.checked ? 'none' : s.style.display);
+  });
+});
+// Re-evaluate on any change
+document.querySelectorAll('input[name="gamemode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const checked = document.querySelector('input[name="gamemode"]:checked')?.value;
+    const s = document.getElementById('infect-settings');
+    if (s) s.style.display = checked === 'infection' ? 'flex' : 'none';
+  });
+});
+
 playBtn.addEventListener('click', () => {
   const mode = document.querySelector('input[name="gamemode"]:checked')?.value || 'normal';
   pvpMode        = mode === 'pvp';
   infectionMode  = mode === 'infection';
   susMode        = mode === 'sus';
+  if (infectionMode) {
+    infectNpcCount   = Math.max(1, parseInt(document.getElementById('npc-count-input')?.value) || 5);
+    infectStartCount = Math.max(1, parseInt(document.getElementById('infect-start-input')?.value) || 1);
+  }
   overlay.style.display = 'none';
   startGame(susMode ? 'polus2' : mapPicker.value);
   canvas.requestPointerLock();
@@ -1146,12 +1168,12 @@ function spawnNPCs() {
   const sp = mapDef.spawn;
   const bx = sp.x*TILE+TILE/2, bz = sp.z*TILE+TILE/2;
 
-  const npcSpawnCount = susMode ? SUS_NPC_COUNT : NPC_COUNT;
+  const npcSpawnCount = susMode ? SUS_NPC_COUNT : (infectionMode ? infectNpcCount : NPC_COUNT);
   for (let i=0; i<npcSpawnCount; i++) {
     const col = NPC_COLORS_POOL[i % NPC_COLORS_POOL.length];
     const hat = NPC_HATS[i % NPC_HATS.length];
     const mesh = makeCrewmate(col, hat, 'none');
-    const a = (i/NPC_COUNT)*Math.PI*2;
+    const a = (i/npcSpawnCount)*Math.PI*2;
     mesh.position.set(bx+Math.cos(a)*1.6, 0, bz+Math.sin(a)*1.6);
     scene.add(mesh);
 
@@ -1512,7 +1534,7 @@ function updatePlayer(dt) {
   const rgt = new THREE.Vector3(-Math.cos(camYaw), 0,  Math.sin(camYaw));
   const move = new THREE.Vector3();
 
-  if (!player.dead) {
+  if (!player.dead && !(infectionMode && playerInfectLockout > 0)) {
     if (keys['KeyW'] || (!activeMinigame && keys['ArrowUp']))    move.add(fwd);
     if (keys['KeyS'] || (!activeMinigame && keys['ArrowDown']))  move.sub(fwd);
     if (keys['KeyA'] || (!activeMinigame && keys['ArrowLeft']))  move.sub(rgt);
@@ -2161,7 +2183,10 @@ function updateCutscene(dt) {
       csCamera.lookAt(0, 0.65, 0);
     }
 
-    if (ct >= 6.0) { csActive = false; csScene = null; csMats = []; csGreenLight = null; }
+    if (ct >= 6.0) {
+      tintInfected(playerMesh); // snap to full infected look on final frame
+      csActive = false; csScene = null; csMats = []; csGreenLight = null;
+    }
     return;
   }
 
@@ -2412,9 +2437,10 @@ function startInfectAttackCutscene(attackerColor, attackerHat) {
 function initInfection() {
   const types = MG_TYPES;
   panels.forEach((p, i) => { p.userData.minigameType = types[i % types.length]; });
-  // Pick a random entity (player or any NPC) as first infected
   const pool = ['player', ...npcs];
-  infectEntity(pool[Math.floor(Math.random() * pool.length)], true);
+  const shuffled = pool.sort(() => Math.random() - 0.5);
+  const count = Math.min(infectStartCount, pool.length);
+  for (let i = 0; i < count; i++) infectEntity(shuffled[i], i === 0);
   updateInfectionHUD();
 }
 
