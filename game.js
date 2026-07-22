@@ -356,6 +356,51 @@ const MAPS = {
   };
 }
 
+// ─── Rooftops map (generated) ────────────────────────────────────────────────
+{
+  const R=28, C=42;
+  const g=Array.from({length:R},()=>new Array(C).fill(1));
+  const o=(r1,c1,r2,c2)=>{for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++)g[r][c]=0;};
+
+  // Building A — top left (low roof)
+  o(1,1,8,12);
+  // Building B — top right (tallest)
+  o(1,22,9,39);
+  // Building E — centre hub
+  o(11,13,18,24);
+  // Building C — bottom left
+  o(21,1,26,12);
+  // Building D — bottom right
+  o(21,27,26,40);
+
+  // Plank A ↔ B  (narrow bridge, 2 rows)
+  o(4,13,5,21);
+  // Plank A ↔ E  (descends from A bottom to E top)
+  o(9,7,10,13);
+  // Plank B ↔ E  (descends from B bottom to E top)
+  o(10,20,10,24);
+  // Plank E ↔ C  (descends from E bottom to C top, 2 rows)
+  o(19,5,20,13);
+  // Plank E ↔ D  (descends from E bottom to D top, 2 rows)
+  o(19,24,20,29);
+
+  // Heights (visual only) — stored per building for custom geometry
+  const buildings = [
+    { r1:1,c1:1,  r2:8, c2:12, h:3.0, color:0x5a7a8a },  // A
+    { r1:1,c1:22, r2:9, c2:39, h:6.0, color:0x4a5568 },  // B
+    { r1:11,c1:13,r2:18,c2:24, h:4.5, color:0x607060 },  // E
+    { r1:21,c1:1, r2:26,c2:12, h:2.5, color:0x7a6050 },  // C
+    { r1:21,c1:27,r2:26,c2:40, h:4.0, color:0x506070 },  // D
+  ];
+
+  MAPS.rooftops={
+    name:'ROOFTOPS', panelCount:10, floorPanels:true,
+    colors:{floor:0x404040, ceiling:0x0a0a12, wall:0x303030, trim:0x00ccff, light:0xaaccff},
+    grid:g, spawn:{x:6,z:4}, elevator:{x:33,z:23},
+    rooftopBuildings: buildings,
+  };
+}
+
 // ─── Polus vent network ───────────────────────────────────────────────────────
 // Each vent: grid col/row, display label, network id, linked vent ids
 const POLUS_VENTS = [
@@ -915,7 +960,20 @@ function buildMap() {
     s => Math.hypot(s.wx - elevatorPos.x, s.wz - elevatorPos.z) > TILE
   );
   shuffle(sides);
-  if (!pvpMode) sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
+  if (!pvpMode) {
+    if (mapDef.floorPanels) {
+      // Place panels as glowing floor pads on walkable cells (rooftops map)
+      const open = [];
+      const ev = mapDef.elevator;
+      for (let r=1;r<rows-1;r++) for (let cc=1;cc<cols-1;cc++) {
+        if (g[r][cc]===0 && Math.hypot(cc-ev.x,r-ev.z)>3) open.push({r,c:cc});
+      }
+      shuffle(open);
+      open.slice(0, mapDef.panelCount).forEach(({r,c:cc}) => addFloorPad(cc*TILE+TILE/2, r*TILE+TILE/2, c.trim));
+    } else {
+      sides.slice(0, mapDef.panelCount).forEach(s => addPanel(s, c.trim));
+    }
+  }
 
   // ── Ladders ──────────────────────────────────────────────────────────────────
   ladderPairs = [];
@@ -927,6 +985,9 @@ function buildMap() {
       ladderPairs.push({ fromPos:fp, toPos:tp, cooldown:0 });
     }
   }
+
+  // ── Rooftop custom geometry ──────────────────────────────────────────────────
+  if (mapDef.rooftopBuildings) buildRooftopGeometry();
 
   // ── Spike traps ───────────────────────────────────────────────────────────────
   trapCells = [];
@@ -1003,6 +1064,115 @@ function addPanel(ws, accentColor) {
 
   scene.add(grp);
   panels.push(grp);
+}
+
+function addFloorPad(wx, wz, accentColor) {
+  const grp = new THREE.Group();
+  const padMat = new THREE.MeshBasicMaterial({ color: accentColor });
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(0.6, 16), padMat);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = 0.02;
+  grp.add(pad);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.74, 16),
+    new THREE.MeshBasicMaterial({ color: accentColor, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.021;
+  grp.add(ring);
+  const glow = new THREE.PointLight(accentColor, 1.1, 4);
+  glow.position.y = 0.5;
+  grp.add(glow);
+  grp.position.set(wx, 0, wz);
+  grp.userData = {
+    activated: false,
+    screenMat: padMat, glow,
+    worldPos: new THREE.Vector3(wx, 0, wz),
+  };
+  scene.add(grp);
+  panels.push(grp);
+}
+
+function buildRooftopGeometry() {
+  const bldgs = mapDef.rooftopBuildings;
+  if (!bldgs) return;
+
+  for (const b of bldgs) {
+    const wx = (b.c1 + b.c2 + 1) / 2 * TILE;
+    const wz = (b.r1 + b.r2 + 1) / 2 * TILE;
+    const ww = (b.c2 - b.c1 + 1) * TILE;
+    const wd = (b.r2 - b.r1 + 1) * TILE;
+
+    // Building sides (four walls below the roof, giving height impression)
+    const sideMat = new THREE.MeshLambertMaterial({ color: b.color });
+    const darkMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.55) });
+
+    // Front / back
+    for (const [dz, mat] of [[wd/2, darkMat],[-wd/2, sideMat]]) {
+      const face = new THREE.Mesh(new THREE.BoxGeometry(ww, b.h, 0.3), mat);
+      face.position.set(wx, -b.h/2, wz + dz);
+      scene.add(face);
+    }
+    // Left / right
+    for (const [dx, mat] of [[ww/2, darkMat],[-ww/2, sideMat]]) {
+      const face = new THREE.Mesh(new THREE.BoxGeometry(0.3, b.h, wd), mat);
+      face.position.set(wx + dx, -b.h/2, wz);
+      scene.add(face);
+    }
+
+    // Roof edge trim / parapet
+    const trimMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(b.color).multiplyScalar(1.3).getHex() });
+    for (const [axis,pos,sz] of [
+      ['x', [wx, 0.15, wz+wd/2], [ww+0.3,0.3,0.3]],
+      ['x', [wx, 0.15, wz-wd/2], [ww+0.3,0.3,0.3]],
+      ['z', [wx+ww/2, 0.15, wz], [0.3,0.3,wd]],
+      ['z', [wx-ww/2, 0.15, wz], [0.3,0.3,wd]],
+    ]) {
+      const parapet = new THREE.Mesh(new THREE.BoxGeometry(...sz), trimMat);
+      parapet.position.set(...pos);
+      scene.add(parapet);
+    }
+
+    // Rooftop details: AC unit or vent box on each building
+    const detailMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.8), detailMat);
+    box.position.set(wx + ww*0.28, 0.4, wz - wd*0.28);
+    scene.add(box);
+  }
+
+  // Slanted planks (visual only — angled boxes over the plank corridors)
+  const plankMat = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
+  const planks = [
+    // A↔B: horizontal at moderate height
+    { x:(13+21)/2*TILE+TILE/2, z: 4.5*TILE+TILE/2, w:9*TILE, d:2*TILE, tiltZ:0.18, ry:0 },
+    // A↔E: slopes down
+    { x: 10*TILE+TILE/2, z: 9.5*TILE+TILE/2, w: 7*TILE, d:2*TILE, tiltZ:0.22, ry:Math.PI/2 },
+    // B↔E: slopes down
+    { x: 22*TILE+TILE/2, z: 10*TILE+TILE/2, w: 5*TILE, d:2*TILE, tiltZ:0.20, ry:0 },
+    // E↔C: slopes down
+    { x: 9*TILE+TILE/2,  z: 19.5*TILE+TILE/2, w: 9*TILE, d:2*TILE, tiltZ:0.25, ry:Math.PI/2 },
+    // E↔D: slopes down
+    { x: 26.5*TILE+TILE/2, z: 19.5*TILE+TILE/2, w: 6*TILE, d:2*TILE, tiltZ:0.20, ry:Math.PI/2 },
+  ];
+  for (const p of planks) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.18, p.d), plankMat);
+    plank.position.set(p.x, -0.1, p.z);
+    plank.rotation.y = p.ry;
+    plank.rotation.z = p.tiltZ;
+    scene.add(plank);
+    // Plank side rails
+    for (const side of [-1, 1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.25, 0.1), plankMat);
+      rail.position.set(p.x, 0.2, p.z + side*(p.d/2 - 0.05));
+      rail.rotation.y = p.ry;
+      rail.rotation.z = p.tiltZ;
+      scene.add(rail);
+    }
+  }
+
+  // Night-sky atmosphere: dim blue ambient
+  scene.add(new THREE.AmbientLight(0x0a1020, 0.4));
+  // City glow from below
+  const cityGlow = new THREE.HemisphereLight(0x203060, 0xff8800, 0.6);
+  scene.add(cityGlow);
 }
 
 // ─── Crewmate mesh ────────────────────────────────────────────────────────────
