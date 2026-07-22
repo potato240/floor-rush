@@ -710,6 +710,8 @@ function loadMap(mapKey) {
 
   pvpBlue = []; pvpRed = []; wPickups = []; bullets = []; pvpOver = false;
   playerInfected = false; playerInfectLockout = 0; activeMinigame = null; infectionOver = false;
+  const vig = document.getElementById('infect-vignette');
+  if (vig) vig.style.display = 'none';
   susOver = false; susKillCd = 0; susSabotage = null; playerIsImp = false; susMeeting = null;
   vents = []; ventSelection = null;
   buildMap();
@@ -1328,8 +1330,10 @@ function buildLadderMesh(wx, wz) {
 
 // ─── Trap mesh ────────────────────────────────────────────────────────────────
 function buildTrapMesh(wx, wz) {
-  const plateMat = new THREE.MeshLambertMaterial({ color:0x444444 });
-  const spikeMat = new THREE.MeshLambertMaterial({ color:0xbbbbbb });
+  const infected = infectionMode;
+  const plateMat = new THREE.MeshLambertMaterial({ color: infected ? 0x1a5c2a : 0x444444 });
+  const spikeMat = new THREE.MeshLambertMaterial({ color: infected ? 0x33cc55 : 0xbbbbbb,
+    emissive: infected ? new THREE.Color(0x0a2210) : new THREE.Color(0x000000) });
   const plate = new THREE.Mesh(new THREE.BoxGeometry(TILE*0.7,0.06,TILE*0.7), plateMat);
   plate.position.set(wx, 0.03, wz); scene.add(plate);
   for (let sx=-1; sx<=1; sx++) for (let sz=-1; sz<=1; sz++) {
@@ -1337,7 +1341,7 @@ function buildTrapMesh(wx, wz) {
     spike.position.set(wx+sx*0.55, 0.24, wz+sz*0.55); scene.add(spike);
   }
   const warn = new THREE.Mesh(new THREE.RingGeometry(TILE*0.34,TILE*0.39,12),
-    new THREE.MeshBasicMaterial({color:0xff2200, side:THREE.DoubleSide}));
+    new THREE.MeshBasicMaterial({ color: infected ? 0x22ff55 : 0xff2200, side:THREE.DoubleSide }));
   warn.rotation.x = -Math.PI/2; warn.position.set(wx, 0.04, wz); scene.add(warn);
 }
 
@@ -2349,6 +2353,8 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     playerInfected = true;
     playerInfectLockout = 15;
     tintInfected(player.mesh);
+    const vig = document.getElementById('infect-vignette');
+    if (vig) vig.style.display = 'block';
     if (activeMinigame) cancelMinigame();
     spawnInfectPuddle(player.pos.x, player.pos.z);
     if (isFirst && infectShowAnims) showInfectCutscene();
