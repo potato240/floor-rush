@@ -2347,7 +2347,8 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     if (activeMinigame) cancelMinigame();
     spawnInfectPuddle(player.pos.x, player.pos.z);
     if (isFirst && infectShowAnims) showInfectCutscene();
-    else if (infectShowAnims) { player.infectAnim = { t: 0 }; }
+    else if (attacker && !csActive && infectShowAnims) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
+    else if (!infectShowAnims) { player.infectAnim = { t: 0 }; }
     else doFlash(0x00ff44, 0.7);
   } else {
     if (entity.infected) return;
