@@ -246,6 +246,15 @@
     .mg-seq-key { width:36px; height:36px; background:#222; border:2px solid #444; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:18px; }
     .mg-seq-key.mg-seq-active { border-color:#00ffcc; color:#00ffcc; background:#0a2525; }
     .mg-seq-key.mg-seq-done  { background:#007744; border-color:#007744; color:#fff; }
+    /* Simon Says */
+    #simon-grid { display:grid; grid-template-columns:80px 80px 80px; grid-template-rows:80px 80px 80px; gap:6px; margin:10px auto; width:fit-content; }
+    .simon-btn { border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px; cursor:default; transition:filter .08s; border:2px solid #333; }
+    .simon-btn.lit { filter:brightness(2.2) drop-shadow(0 0 10px currentColor); border-color:#fff; }
+    #simon-up    { background:#1a4a1a; color:#00ff66; grid-column:2; grid-row:1; }
+    #simon-left  { background:#1a1a4a; color:#4488ff; grid-column:1; grid-row:2; }
+    #simon-center{ background:#111; color:#555;       grid-column:2; grid-row:2; border:none; font-size:12px; letter-spacing:1px; }
+    #simon-right { background:#4a1a1a; color:#ff4444; grid-column:3; grid-row:2; }
+    #simon-down  { background:#3a2a00; color:#ffcc00; grid-column:2; grid-row:3; }
     .mg-hint { font-size:11px; color:#555; }
 
     /* Sus HUD */

@@ -636,7 +636,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyE') { if (activeMinigame) handleMinigameKey('KeyE'); else interact(); }
   if (e.code === 'KeyV') togglePOV();
   if (e.code === 'Escape' && activeMinigame) cancelMinigame();
-  if (activeMinigame && (activeMinigame.type === 'sequence' || activeMinigame.type === 'calibrate') &&
+  if (activeMinigame && (activeMinigame.type === 'sequence' || activeMinigame.type === 'calibrate' || activeMinigame.type === 'simon') &&
       ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
     handleMinigameKey(e.code);
   if (e.code === 'KeyK' && susMode && playerIsImp && locked) susPlayerKill();
@@ -2640,7 +2640,7 @@ function loop() {
 }
 
 // ─── Infection mode ───────────────────────────────────────────────────────────
-const MG_TYPES = ['mash','timing','sequence','hold','calibrate'];
+const MG_TYPES = ['mash','timing','sequence','hold','calibrate','simon'];
 
 function addInfectedMouth(g) {
   const darkMat  = new THREE.MeshLambertMaterial({ color: 0x050505 });
@@ -3059,6 +3059,10 @@ function startMinigame(panel) {
     state = { seq: Array.from({length:len}, ()=>DIRS[Math.floor(Math.random()*4)]), index:0 };
   } else if (type === 'hold') {
     state = { held:0, required:3.0 };
+  } else if (type === 'simon') {
+    const DIRS = ['ArrowUp','ArrowLeft','ArrowRight','ArrowDown'];
+    const seq = Array.from({length:3}, () => DIRS[Math.floor(Math.random()*4)]);
+    state = { seq, round:0, showPhase:true, showIndex:0, showTimer:0.7, inputIndex:0 };
   } else {
     // calibrate: 3 sliders, move with left/right, E to lock each
     state = { sliders: Array.from({length:3}, () => ({
@@ -3095,6 +3099,17 @@ function renderMinigameUI() {
     el.innerHTML = `<div class="mg-label">PRESS THE SEQUENCE!</div>
       <div id="mg-seq-row">${seqKeys}</div>
       <div class="mg-hint">Use arrow keys</div>`;
+  } else if (mg.type === 'simon') {
+    const s = mg.state;
+    const phase = s.showPhase ? 'WATCH...' : 'YOUR TURN!';
+    el.innerHTML = `<div class="mg-label">SIMON SAYS — ${phase}</div>
+      <div id="simon-grid">
+        <div class="simon-btn" id="simon-up">↑</div>
+        <div class="simon-btn" id="simon-left">←</div>
+        <div class="simon-btn" id="simon-center">ROUND ${s.round+1}/3</div>
+        <div class="simon-btn" id="simon-right">→</div>
+        <div class="simon-btn" id="simon-down">↓</div>
+      </div>`;
   } else if (mg.type === 'hold') {
     el.innerHTML = `<div class="mg-label">HOLD [E]!</div>
       <div class="mg-bar-wrap"><div class="mg-bar-fill" id="mg-fill" style="width:0%"></div></div>
@@ -3152,6 +3167,44 @@ function updateMinigame(dt) {
       if (keys['ArrowRight']) s.sliders[s.current].pos = Math.min(1, s.sliders[s.current].pos + speed);
       renderMinigameUI();
     }
+  } else if (mg.type === 'simon') {
+    const s = mg.state;
+    if (!s.showPhase) return;
+    const DID = { ArrowUp:'simon-up', ArrowLeft:'simon-left', ArrowRight:'simon-right', ArrowDown:'simon-down' };
+    const LIT_DUR = 0.5, GAP_DUR = 0.2, STEP = LIT_DUR + GAP_DUR;
+
+    // On first frame, init step timer
+    if (s.stepTimer === undefined) { s.stepTimer = 0; s.stepIndex = 0; }
+
+    s.stepTimer += dt;
+
+    // Which step are we in?
+    const step = Math.floor(s.stepTimer / STEP);
+    const within = s.stepTimer % STEP;
+
+    // Un-light everything first
+    for (const id of Object.values(DID)) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('lit');
+    }
+
+    if (step <= s.round) {
+      // Light current step's button if in lit period
+      if (within < LIT_DUR) {
+        const btn = document.getElementById(DID[s.seq[step]]);
+        if (btn) btn.classList.add('lit');
+      }
+    }
+
+    // Done showing all items for this round
+    if (s.stepTimer >= (s.round + 1) * STEP) {
+      for (const id of Object.values(DID)) {
+        const el = document.getElementById(id); if (el) el.classList.remove('lit');
+      }
+      s.showPhase = false;
+      s.inputIndex = 0;
+      renderMinigameUI();
+    }
   }
 }
 
@@ -3189,6 +3242,32 @@ function handleMinigameKey(code) {
       renderMinigameUI();
     } else {
       doFlash(0xff2200, 0.2);
+    }
+  } else if (mg.type === 'simon') {
+    const s = mg.state;
+    if (s.showPhase) return;
+    const arrows = ['ArrowUp','ArrowLeft','ArrowRight','ArrowDown'];
+    if (!arrows.includes(code)) return;
+    const DID = { ArrowUp:'simon-up', ArrowLeft:'simon-left', ArrowRight:'simon-right', ArrowDown:'simon-down' };
+    if (code === s.seq[s.inputIndex]) {
+      const btn = document.getElementById(DID[code]);
+      if (btn) { btn.classList.add('lit'); setTimeout(() => btn.classList.remove('lit'), 200); }
+      s.inputIndex++;
+      if (s.inputIndex > s.round) {
+        if (s.round >= 2) {
+          completeMinigame();
+        } else {
+          s.round++;
+          s.showPhase = true;
+          s.stepTimer = undefined;
+          s.inputIndex = 0;
+          renderMinigameUI();
+        }
+      }
+    } else {
+      doFlash(0xff2200, 0.3);
+      cancelMinigame();
+      showMessage('WRONG ORDER!', 1400);
     }
   } else if (mg.type === 'sequence') {
     const expected = mg.state.seq[mg.state.index];
