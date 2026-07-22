@@ -612,7 +612,6 @@ let infectionMode      = false;
 let playerInfected     = false;
 let footprints         = []; // { mesh, life } green trail marks left by infected
 let puddles            = []; // permanent green puddles at infection sites (cleared on map change)
-let playerLockoutFog   = null; // { mesh, t } — expands 3s then shrinks 0.5s on infection lockout
 let playerInfectLockout = 0;
 let activeMinigame     = null;
 let infectionOver      = false;
@@ -763,7 +762,6 @@ function loadMap(mapKey) {
   footprints = [];
   for (const m of puddles) scene.remove(m);
   puddles = [];
-  if (playerLockoutFog) { scene.remove(playerLockoutFog.mesh); playerLockoutFog = null; }
   lookTarget = null;
 
   const bgColor = 0x0d0d14;
@@ -2699,16 +2697,6 @@ function spawnInfectPuddle(x, z) {
   puddles.push(mesh);
 }
 
-function spawnLockoutFog(x, z) {
-  if (playerLockoutFog) { scene.remove(playerLockoutFog.mesh); playerLockoutFog = null; }
-  const geo = new THREE.CylinderGeometry(1.1, 1.1, 2.0, 32);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x22dd55, transparent: true, opacity: 1.0 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 1.0, z);
-  mesh.scale.setScalar(3); // starts large, closes in
-  scene.add(mesh);
-  playerLockoutFog = { mesh, phase: 'closing', t: 0 };
-}
 
 function infectEntity(entity, isFirst = false, attacker = null) {
   if (entity === 'player') {
@@ -2720,7 +2708,6 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     if (vig) vig.style.display = 'block';
     if (activeMinigame) cancelMinigame();
     spawnInfectPuddle(player.pos.x, player.pos.z);
-    spawnLockoutFog(player.pos.x, player.pos.z);
     if (isFirst && infectShowAnims) showInfectCutscene();
     else if (attacker && !csActive && infectShowAnims) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
     else if (!infectShowAnims) { player.infectAnim = { t: 0 }; }
@@ -2880,32 +2867,6 @@ function updateInfection(dt) {
   updateMinigame(dt);
   if (playerInfectLockout > 0) playerInfectLockout = Math.max(0, playerInfectLockout - dt);
 
-  // Lockout fog: closes in over 0.5s on infection, stays puddle-sized, opens out over 3s when lockout ends
-  if (playerLockoutFog) {
-    const fog = playerLockoutFog;
-    fog.t += dt;
-    fog.mesh.position.x = player.pos.x;
-    fog.mesh.position.z = player.pos.z;
-
-    if (fog.phase === 'closing') {
-      const p = Math.min(1, fog.t / 0.5);
-      fog.mesh.scale.setScalar(3 - p * 2); // 3 → 1
-      fog.mesh.material.opacity = 1.0;
-      if (p >= 1) { fog.phase = 'idle'; fog.t = 0; }
-
-    } else if (fog.phase === 'idle') {
-      fog.mesh.scale.setScalar(1);
-      fog.mesh.material.opacity = 1.0;
-      // Switch to opening when lockout ends
-      if (playerInfectLockout <= 0) { fog.phase = 'opening'; fog.t = 0; }
-
-    } else if (fog.phase === 'opening') {
-      const p = Math.min(1, fog.t / 3.0);
-      fog.mesh.scale.setScalar(1 + p * 4); // 1 → 5
-      fog.mesh.material.opacity = 1 - p;
-      if (p >= 1) { scene.remove(fog.mesh); playerLockoutFog = null; }
-    }
-  }
 
   // Non-infected NPCs flee from nearest infected entity
   for (const npc of npcs) {
