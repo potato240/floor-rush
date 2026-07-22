@@ -2297,6 +2297,16 @@ function tintInfected(mesh) {
   addInfectedMouth(mesh);
 }
 
+function spawnInfectPuddle(x, z) {
+  const geo = new THREE.CircleGeometry(0.9 + Math.random() * 0.4, 18);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x22cc44, transparent: true, opacity: 0.55 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x, 0.015, z);
+  scene.add(mesh);
+  footprints.push({ mesh, life: 12, maxLife: 12 });
+}
+
 function infectEntity(entity, isFirst = false, attacker = null) {
   if (entity === 'player') {
     if (playerInfected) return;
@@ -2304,6 +2314,7 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     playerInfectLockout = 15;
     tintInfected(player.mesh);
     if (activeMinigame) cancelMinigame();
+    spawnInfectPuddle(player.pos.x, player.pos.z);
     if (isFirst) showInfectCutscene();
     else if (attacker && !csActive) startInfectAttackCutscene(attacker.color, attacker.hat || 'none');
     else doFlash(0x00ff44, 0.7);
@@ -2312,7 +2323,8 @@ function infectEntity(entity, isFirst = false, attacker = null) {
     entity.infected = true;
     entity.infectLockout = 15;
     tintInfected(entity.mesh);
-    entity.infectAnim = { t: 0 }; // trigger in-world fall/roar animation
+    entity.infectAnim = { t: 0 };
+    spawnInfectPuddle(entity.mesh.position.x, entity.mesh.position.z);
   }
   updateInfectionHUD();
   checkInfectionEnd();
@@ -2562,7 +2574,9 @@ function updateFootprints(dt) {
   for (let i = footprints.length - 1; i >= 0; i--) {
     const fp = footprints[i];
     fp.life -= dt;
-    fp.mesh.material.opacity = Math.max(0, (fp.life / FOOTPRINT_LIFE) * 0.75);
+    const maxLife = fp.maxLife || FOOTPRINT_LIFE;
+    const maxOpacity = fp.maxLife ? 0.55 : 0.75;
+    fp.mesh.material.opacity = Math.max(0, (fp.life / maxLife) * maxOpacity);
     if (fp.life <= 0) {
       scene.remove(fp.mesh);
       footprints.splice(i, 1);
