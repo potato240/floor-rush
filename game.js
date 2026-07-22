@@ -659,6 +659,9 @@ canvas.addEventListener('mousedown', e => { if (e.button === 0 && locked && pvpM
 let infectNpcCount   = 5;
 let infectStartCount = 1;
 let infectShowAnims  = true;
+let infectTimerMode  = false;
+let infectTimerDuration = 60;
+let infectTimerRemaining = 0;
 
 document.querySelectorAll('input[name="gamemode"]').forEach(r => {
   r.addEventListener('change', () => {
@@ -681,9 +684,12 @@ playBtn.addEventListener('click', () => {
   infectionMode  = mode === 'infection';
   susMode        = mode === 'sus';
   if (infectionMode) {
-    infectNpcCount   = Math.max(1, parseInt(document.getElementById('npc-count-input')?.value) || 5);
-    infectStartCount = Math.max(1, parseInt(document.getElementById('infect-start-input')?.value) || 1);
-    infectShowAnims  = document.getElementById('infect-anim-checkbox')?.checked ?? true;
+    infectNpcCount      = Math.max(1, parseInt(document.getElementById('npc-count-input')?.value) || 5);
+    infectStartCount    = Math.max(1, parseInt(document.getElementById('infect-start-input')?.value) || 1);
+    infectShowAnims     = document.getElementById('infect-anim-checkbox')?.checked ?? true;
+    infectTimerMode     = document.getElementById('infect-timer-checkbox')?.checked ?? false;
+    infectTimerDuration = Math.max(10, parseInt(document.getElementById('infect-timer-input')?.value) || 60);
+    infectTimerRemaining = infectTimerDuration;
   }
   overlay.style.display = 'none';
   startGame(susMode ? 'polus2' : mapPicker.value);
@@ -759,6 +765,9 @@ function loadMap(mapKey) {
   playerInfected = false; playerInfectLockout = 0; activeMinigame = null; infectionOver = false;
   const vig = document.getElementById('infect-vignette');
   if (vig) vig.style.display = 'none';
+  infectTimerRemaining = infectTimerDuration;
+  const timerHud = document.getElementById('survival-timer-hud');
+  if (timerHud) timerHud.style.display = (infectionMode && infectTimerMode) ? 'block' : 'none';
   susOver = false; susKillCd = 0; susSabotage = null; playerIsImp = false; susMeeting = null;
   vents = []; ventSelection = null;
   buildMap();
@@ -962,7 +971,7 @@ function buildMap() {
     s => Math.hypot(s.wx - elevatorPos.x, s.wz - elevatorPos.z) > TILE
   );
   shuffle(sides);
-  if (!pvpMode) {
+  if (!pvpMode && !(infectionMode && infectTimerMode)) {
     if (mapDef.floorPanels) {
       // Place panels as glowing floor pads on walkable cells (rooftops map)
       const open = [];
@@ -2795,6 +2804,37 @@ function checkInfectionEnd() {
 
 function updateInfection(dt) {
   if (infectionOver) return;
+
+  if (infectTimerMode) {
+    infectTimerRemaining = Math.max(0, infectTimerRemaining - dt);
+    const secs = Math.ceil(infectTimerRemaining);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    const timerHud = document.getElementById('survival-timer-hud');
+    if (timerHud) {
+      timerHud.textContent = `${m}:${String(s).padStart(2,'0')}`;
+      timerHud.style.color = infectTimerRemaining <= 10 ? '#ff4444' : '#00ff66';
+      timerHud.style.textShadow = infectTimerRemaining <= 10
+        ? '0 0 12px #ff0000,0 0 24px #aa0000'
+        : '0 0 12px #00ff66,0 0 24px #00aa44';
+    }
+    if (infectTimerRemaining <= 0 && !infectionOver) {
+      const survivors = (!playerInfected ? 1 : 0) + npcs.filter(n => !n.infected && !n.dead).length;
+      infectionOver = true;
+      if (survivors > 0) {
+        showMessage('SURVIVORS WIN!', 4500);
+      } else {
+        showMessage('ALL INFECTED', 4500);
+      }
+      setTimeout(() => {
+        const mapKeys = Object.keys(MAPS);
+        const next = mapKeys[(mapKeys.indexOf(currentMapKey) + 1) % mapKeys.length];
+        loadMap(next);
+      }, 5000);
+      return;
+    }
+  }
+
   updateMinigame(dt);
   if (playerInfectLockout > 0) playerInfectLockout = Math.max(0, playerInfectLockout - dt);
 
