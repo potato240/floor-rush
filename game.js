@@ -60,9 +60,11 @@ const AU_COLORS = [
 
 // ─── Mouth definitions ────────────────────────────────────────────────────────
 const MOUTHS = [
-  { id:'none',       label:'None',        icon:'🚫' },
-  { id:'zigzag',     label:'Zigzag',      icon:'〰️' },
-  { id:'greenvisor', label:'Green Visor', icon:'🟢' },
+  { id:'none',             label:'None',                  icon:'🚫' },
+  { id:'zigzag',           label:'Zigzag',                icon:'〰️' },
+  { id:'greenvisor',       label:'Green Visor',           icon:'🟢' },
+  { id:'gvisor-infected',  label:'Green Visor + Infected',icon:'🟢' },
+  { id:'gvisor-zigzag',    label:'Green Visor + Zigzag',  icon:'🟢' },
 ];
 
 // ─── Hat definitions ──────────────────────────────────────────────────────────
@@ -1340,11 +1342,33 @@ function makeMouth(id) {
       grp.add(seg);
     }
   }
-  if (id === 'greenvisor') {
-    const mat = new THREE.MeshBasicMaterial({ color: 0x33ee55, transparent: true, opacity: 0.9 });
+  if (id === 'greenvisor' || id === 'gvisor-infected' || id === 'gvisor-zigzag') {
+    const mat = new THREE.MeshBasicMaterial({ color: 0x33bb44, transparent: true, opacity: 0.9 });
     const visor = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8, 0.2, 2.6, 0.4, 1.2), mat);
     visor.position.set(0, 0.8, 0.18);
     grp.add(visor);
+  }
+  if (id === 'gvisor-infected') {
+    // Small fangs / infected drip below the visor
+    const fangMat = new THREE.MeshBasicMaterial({ color: 0x114422 });
+    for (const fx of [-0.09, 0, 0.09]) {
+      const fang = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.01, 0.1, 5), fangMat);
+      fang.position.set(fx, 0.63, 0.30);
+      grp.add(fang);
+    }
+  }
+  if (id === 'gvisor-zigzag') {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+    const n = 10, spanX = 0.026, spanY = 0.022;
+    const segLen = Math.sqrt(spanX * spanX + spanY * spanY);
+    const angle  = Math.atan2(spanY, spanX);
+    const startX = -(n * spanX) / 2;
+    for (let i = 0; i < n; i++) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.018, 0.018), mat);
+      seg.position.set(startX + (i + 0.5) * spanX, 0.645, 0.315);
+      seg.rotation.z = i % 2 === 0 ? -angle : angle;
+      grp.add(seg);
+    }
   }
   return grp;
 }
