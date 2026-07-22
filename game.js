@@ -2104,8 +2104,7 @@ function updateCutscene(dt) {
     const shake = infectT < 0.8 && fallT === 0 ? Math.sin(ct * 45) * infectT * 0.07 : 0;
 
     if (roarT > 0) {
-      // Turn to face camera so front-face mouth is visible; shake
-      playerMesh.rotation.y = 0;
+      playerMesh.rotation.y = -Math.PI / 2;
       playerMesh.rotation.z = Math.sin(ct * 28) * roarT * 0.1;
       playerMesh.position.set(1.3, -0.18, 0);
       if (roarMouth) { const o = Math.min(1, roarT * 3); roarMouth.scale.set(o, o, 1); }
