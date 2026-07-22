@@ -542,6 +542,10 @@ MOUTHS.forEach(m => {
   mouthGrid.appendChild(btn);
 });
 
+document.getElementById('infect-timer-checkbox').addEventListener('change', function() {
+  document.getElementById('infect-timer-duration-label').style.display = this.checked ? 'flex' : 'none';
+});
+
 // ─── Renderer ─────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
