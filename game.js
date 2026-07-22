@@ -1375,7 +1375,8 @@ function makeMouth(id) {
 
 function makeCrewmate(color, hatId, mouthId = chosenMouth) {
   const g = new THREE.Group();
-  const mat  = new THREE.MeshLambertMaterial({ color });
+  const isInfectedColor = color === 0x33bb44;
+  const mat  = new THREE.MeshLambertMaterial({ color, emissive: isInfectedColor ? new THREE.Color(0x114422) : new THREE.Color(0x000000) });
   const dark = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.5) });
 
   // Body
