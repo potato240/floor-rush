@@ -1069,10 +1069,10 @@ function addPanel(ws, accentColor) {
   const offset = 0.07;
   grp.position.set(
     ws.wx + ws.nx*(TILE/2 - offset),
-    1.35,
+    1.0,
     ws.wz + ws.nz*(TILE/2 - offset)
   );
-  grp.lookAt(ws.wx + ws.nx*100, 1.35, ws.wz + ws.nz*100);
+  grp.lookAt(ws.wx + ws.nx*100, 1.0, ws.wz + ws.nz*100);
 
   grp.userData = {
     activated: false,
