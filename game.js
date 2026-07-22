@@ -1509,10 +1509,10 @@ function updatePlayer(dt) {
   const move = new THREE.Vector3();
 
   if (!player.dead) {
-    if (keys['KeyW']||keys['ArrowUp'])    move.add(fwd);
-    if (keys['KeyS']||keys['ArrowDown'])  move.sub(fwd);
-    if (keys['KeyA']||keys['ArrowLeft'])  move.sub(rgt);
-    if (keys['KeyD']||keys['ArrowRight']) move.add(rgt);
+    if (keys['KeyW'] || (!activeMinigame && keys['ArrowUp']))    move.add(fwd);
+    if (keys['KeyS'] || (!activeMinigame && keys['ArrowDown']))  move.sub(fwd);
+    if (keys['KeyA'] || (!activeMinigame && keys['ArrowLeft']))  move.sub(rgt);
+    if (keys['KeyD'] || (!activeMinigame && keys['ArrowRight'])) move.add(rgt);
   }
 
   const wantSprint = (keys['ShiftLeft']||keys['ShiftRight']) && !player.dead && !infectionMode;
